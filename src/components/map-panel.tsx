@@ -46,6 +46,8 @@ const STORAGE_KEYS = {
   poisOpen: "map-panel:pois-open",
 } as const;
 
+const TILE_DEG = 0.6;
+const MAX_POI_TILES = 25;
 
 function SectionHeader({
   label,
@@ -156,69 +158,87 @@ export function MapPanel({
     return points;
   }, [segments]);
 
-  const bbox = useMemo(() => {
-    if (segments.length === 0) return null;
-    let minLat = Infinity;
-    let maxLat = -Infinity;
-    let minLon = Infinity;
-    let maxLon = -Infinity;
-    for (const seg of segments) {
-      const [fromLon, fromLat] = seg.from;
-      const [toLon, toLat] = seg.to;
-      minLat = Math.min(minLat, fromLat, toLat);
-      maxLat = Math.max(maxLat, fromLat, toLat);
-      minLon = Math.min(minLon, fromLon, toLon);
-      maxLon = Math.max(maxLon, fromLon, toLon);
-    }
+  const poisTiles = useMemo(() => {
+    if (segments.length === 0) return [];
     const pad = 0.02;
-    return { minLat: minLat - pad, maxLat: maxLat + pad, minLon: minLon - pad, maxLon: maxLon + pad };
+    let rMinLat = Infinity, rMaxLat = -Infinity;
+    let rMinLon = Infinity, rMaxLon = -Infinity;
+    for (const seg of segments) {
+      rMinLat = Math.min(rMinLat, seg.from[1], seg.to[1]);
+      rMaxLat = Math.max(rMaxLat, seg.from[1], seg.to[1]);
+      rMinLon = Math.min(rMinLon, seg.from[0], seg.to[0]);
+      rMaxLon = Math.max(rMaxLon, seg.from[0], seg.to[0]);
+    }
+    if (rMaxLat - rMinLat <= TILE_DEG && rMaxLon - rMinLon <= TILE_DEG) {
+      return [{ minLat: rMinLat - pad, maxLat: rMaxLat + pad, minLon: rMinLon - pad, maxLon: rMaxLon + pad }];
+    }
+    const occupied = new Set<string>();
+    for (const seg of segments) {
+      for (const pt of [seg.from, seg.to]) {
+        const cellLat = Math.floor(pt[1] / TILE_DEG) * TILE_DEG;
+        const cellLon = Math.floor(pt[0] / TILE_DEG) * TILE_DEG;
+        occupied.add(`${cellLat.toFixed(4)},${cellLon.toFixed(4)}`);
+      }
+    }
+    const result: Array<{ minLat: number; maxLat: number; minLon: number; maxLon: number }> = [];
+    for (const key of occupied) {
+      if (result.length >= MAX_POI_TILES) break;
+      const [cellLat, cellLon] = key.split(',').map(Number);
+      result.push({
+        minLat: cellLat - pad,
+        maxLat: cellLat + TILE_DEG + pad,
+        minLon: cellLon - pad,
+        maxLon: cellLon + TILE_DEG + pad,
+      });
+    }
+    return result;
   }, [segments]);
 
   useEffect(() => {
-    if (!bbox) return;
-
+    if (poisTiles.length === 0) return;
     const controller = new AbortController();
-    const params = new URLSearchParams({
-      minLat: String(bbox.minLat),
-      minLon: String(bbox.minLon),
-      maxLat: String(bbox.maxLat),
-      maxLon: String(bbox.maxLon),
-    });
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
 
-    const RETRY_DELAYS = [2_000, 6_000, 15_000];
-    let attempt = 0;
-    let retryTimer: ReturnType<typeof setTimeout>;
-
-    const tryFetch = () => {
-      setPoisLoading(true);
-      fetch(`/api/pois?${params.toString()}`, { signal: controller.signal })
+    const fetchTile = (tile: { minLat: number; maxLat: number; minLon: number; maxLon: number }): Promise<Poi[]> => {
+      const params = new URLSearchParams({
+        minLat: String(tile.minLat),
+        minLon: String(tile.minLon),
+        maxLat: String(tile.maxLat),
+        maxLon: String(tile.maxLon),
+      });
+      return fetch(`/api/pois?${params}`, { signal: controller.signal })
         .then(async (res) => {
           const data = await res.json() as { ok: boolean; pois?: Poi[] };
-          if (data.ok && data.pois) {
-            setPois(data.pois);
-            setPoisLoading(false);
-          } else {
-            throw new Error("not ok");
-          }
+          return data.ok && data.pois ? data.pois : [];
         })
-        .catch((err: unknown) => {
-          if (err instanceof Error && err.name === "AbortError") return;
-          if (attempt < RETRY_DELAYS.length) {
-            retryTimer = setTimeout(tryFetch, RETRY_DELAYS[attempt++]);
-          } else {
-            setPoisLoading(false);
-          }
-        });
+        .catch((): Poi[] => []);
     };
 
-    const timer = setTimeout(tryFetch, 600);
+    timer = setTimeout(() => {
+      setPoisLoading(true);
+      void Promise.allSettled(poisTiles.map(fetchTile)).then((results) => {
+        if (cancelled) return;
+        const seen = new Set<number>();
+        const merged: Poi[] = [];
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            for (const poi of r.value) {
+              if (!seen.has(poi.id)) { seen.add(poi.id); merged.push(poi); }
+            }
+          }
+        }
+        setPois(merged);
+        setPoisLoading(false);
+      });
+    }, 600);
 
     return () => {
+      cancelled = true;
       clearTimeout(timer);
-      clearTimeout(retryTimer);
       controller.abort();
     };
-  }, [bbox]);
+  }, [poisTiles]);
 
   const routeFilteredPois = useMemo(
     () => pois.filter((poi) => isNearRoute(poi, segments, poiRadius)),
