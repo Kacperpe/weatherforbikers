@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import type { Poi, PoiCategory } from "@/types/poi";
 
+export const maxDuration = 20;
+
 const OVERPASS_URLS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -14,7 +16,7 @@ const CACHE_MAX = 100;
 
 const MAX_BBOX_DELTA = 1.0;
 const MAX_BBOX_AREA = 0.5;
-const FETCH_TIMEOUT_MS = 8_000;
+const FETCH_TIMEOUT_MS = 9_000;
 
 function cacheSet(key: string, value: { pois: Poi[]; ts: number }) {
   if (poiCache.size >= CACHE_MAX) poiCache.delete(poiCache.keys().next().value!);
@@ -71,34 +73,32 @@ out body 800;
 }
 
 async function fetchOverpass(query: string): Promise<{ elements: OverpassElement[] }> {
-  let lastError = "unknown";
-  for (let i = 0; i < OVERPASS_URLS.length; i += 1) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 1200));
-    const url = OVERPASS_URLS[i];
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "MapaPogodyRowerowanie/1.0",
-        },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        lastError = `HTTP ${res.status}`;
-        continue;
-      }
+  const controllers = OVERPASS_URLS.map(() => new AbortController());
+  const timers = controllers.map((ctrl) => setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS));
+
+  const tryServer = (url: string, ctrl: AbortController) =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "MapaPogodyRowerowanie/1.0",
+      },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: ctrl.signal,
+    }).then(async (res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return (await res.json()) as { elements: OverpassElement[] };
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-    } finally {
-      clearTimeout(timeout);
-    }
+    });
+
+  try {
+    const result = await Promise.any(OVERPASS_URLS.map((url, i) => tryServer(url, controllers[i])));
+    controllers.forEach((c) => c.abort());
+    timers.forEach(clearTimeout);
+    return result;
+  } catch (err) {
+    timers.forEach(clearTimeout);
+    throw err;
   }
-  throw new Error(lastError);
 }
 
 function roundBbox(minLat: string, minLon: string, maxLat: string, maxLon: string): string {
