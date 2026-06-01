@@ -165,21 +165,22 @@ export default function Home() {
   const [tempUnit, setTempUnit] = useState<"°C" | "°F">("°C");
   const [windUnit, setWindUnit] = useState<"km/h" | "m/s" | "mph" | "kn">("km/h");
   const [routeError, setRouteError] = useState<string | null>(null);
-  const [routeStartAt, setRouteStartAt] = useState(() => toDateTimeLocalInputValue(new Date()));
+  const [routeStartAt, setRouteStartAt] = useState("");
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [forecastRows, setForecastRows] = useState<WeatherPointForecast[]>([]);
   const [notifyEmail, setNotifyEmail] = useState("");
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "dark";
-    return window.localStorage.getItem("theme-mode") === "light" ? "light" : "dark";
-  });
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+  const [nowMs, setNowMs] = useState(0);
   const maxForecastDate = useMemo(
-    () => toDateTimeLocalInputValue(new Date(nowMs + FORECAST_WINDOW_MS - FORECAST_BUFFER_MS)),
+    () => nowMs > 0 ? toDateTimeLocalInputValue(new Date(nowMs + FORECAST_WINDOW_MS - FORECAST_BUFFER_MS)) : "",
     [nowMs],
   );
   useEffect(() => {
+    const now = Date.now();
+    setNowMs(now);
+    setRouteStartAt(toDateTimeLocalInputValue(new Date(now)));
+    setThemeMode(window.localStorage.getItem("theme-mode") === "light" ? "light" : "dark");
     const timer = setInterval(() => setNowMs(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
