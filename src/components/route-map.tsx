@@ -203,8 +203,32 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
     for (const alert of weatherAlerts) {
       const pk = primaryKind(alert.kinds);
       const { color } = KIND_CONFIG[pk];
-      const radius = alertRadius(alert);
-      const emojis = alert.kinds.map((k) => KIND_CONFIG[k].emoji).join(" ");
+      const emojis = alert.kinds.map((k) => KIND_CONFIG[k].emoji).join("");
+
+      // Key metric shown inline on the chip
+      let metric = fmtTemp(alert.temperatureC);
+      if (alert.kinds.includes("rain") || alert.kinds.includes("storm")) {
+        metric = `${fmtTemp(alert.temperatureC)} ${alert.precipitationProbability ?? 0}%`;
+      } else if (alert.kinds.includes("wind") && !alert.kinds.includes("rain")) {
+        metric = `${fmtTemp(alert.temperatureC)} 💨${fmtWind(alert.windKmh ?? null)}`;
+      }
+
+      const chipHtml = `<div style="
+        background:${color}22;
+        border:2px solid ${color};
+        border-radius:20px;
+        padding:3px 9px;
+        font-size:13px;
+        font-family:system-ui,sans-serif;
+        white-space:nowrap;
+        box-shadow:0 2px 10px rgba(0,0,0,0.55);
+        display:inline-flex;
+        align-items:center;
+        gap:4px;
+        cursor:pointer;
+        pointer-events:auto;
+        transform:translate(-50%,-50%);
+      ">${emojis}<span style="font-size:11px;font-weight:700;color:${color}">${metric}</span></div>`;
 
       const kindRows = alert.kinds.map((k) => {
         const cfg = KIND_CONFIG[k];
@@ -232,13 +256,14 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
         </div>
       </div>`;
 
-      L.circleMarker([alert.lat, alert.lon], {
-        radius,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 0.88,
-      })
+      const divIcon = L.divIcon({
+        html: chipHtml,
+        className: "",
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      L.marker([alert.lat, alert.lon], { icon: divIcon, zIndexOffset: 1000 })
         .bindPopup(popup)
         .addTo(alertLayer);
     }
