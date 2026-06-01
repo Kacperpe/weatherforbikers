@@ -46,9 +46,13 @@ const STORAGE_KEYS = {
   poisOpen: "map-panel:pois-open",
 } as const;
 
-const TILE_DEG = 0.6;
-const MAX_POI_TILES = 25;
-const POI_CONCURRENCY = 3;
+// Smaller tiles than a city-sized 0.6° box: faster Overpass queries that stay
+// under the result cap (a 0.6° tile truncated dense areas and dropped POIs).
+const TILE_DEG = 0.35;
+const MAX_POI_TILES = 40;
+// Keep low: each tile races all 3 Overpass mirrors, so concurrency N = N requests
+// hitting the main mirror at once — public Overpass throttles ~2 concurrent per IP.
+const POI_CONCURRENCY = 2;
 
 function SectionHeader({
   label,
