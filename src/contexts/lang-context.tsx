@@ -11,11 +11,21 @@ type LangContextType = {
 
 const LangContext = createContext<LangContextType | null>(null);
 
+function detectDeviceLang(): Lang {
+  const candidates = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const raw of candidates) {
+    const code = raw.split("-")[0].toLowerCase() as Lang;
+    if (LANGS.includes(code)) return code;
+  }
+  return "pl";
+}
+
 export function LangProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
     if (typeof window === "undefined") return "pl";
     const saved = window.localStorage.getItem("lang") as Lang | null;
-    return saved && LANGS.includes(saved) ? saved : "pl";
+    if (saved && LANGS.includes(saved)) return saved;
+    return detectDeviceLang();
   });
 
   function setLang(l: Lang) {
