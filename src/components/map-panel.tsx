@@ -136,7 +136,6 @@ export function MapPanel({
   const { t } = useLang();
   const [pois, setPois] = useState<Poi[]>([]);
   const [poisLoading, setPoisLoading] = useState(false);
-  const [poisError, setPoisError] = useState<string | null>(null);
   const [activeCategories, setActiveCategories] = useState<Set<PoiCategory>>(new Set(ALL_CATEGORIES));
   const [poisVisible, setPoisVisible] = useState(() => readStoredBool(STORAGE_KEYS.poisVisible, true));
   const [alertsVisible, setAlertsVisible] = useState(() => readStoredBool(STORAGE_KEYS.alertsVisible, true));
@@ -179,38 +178,37 @@ export function MapPanel({
       maxLon: String(bbox.maxLon),
     });
 
-    const timer = setTimeout(() => {
+    const RETRY_DELAYS = [2_000, 6_000, 15_000];
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout>;
+
+    const tryFetch = () => {
       setPoisLoading(true);
-      setPoisError(null);
-      const fetchOnce = () => fetch(`/api/pois?${params.toString()}`, { signal: controller.signal });
-      fetchOnce()
+      fetch(`/api/pois?${params.toString()}`, { signal: controller.signal })
         .then(async (res) => {
-          if (res.status >= 500) {
-            await new Promise((r) => setTimeout(r, 500));
-            return fetchOnce();
+          const data = await res.json() as { ok: boolean; pois?: Poi[] };
+          if (data.ok && data.pois) {
+            setPois(data.pois);
+            setPoisLoading(false);
+          } else {
+            throw new Error("not ok");
           }
-          return res;
-        })
-        .then(async (res) => {
-          let data: { ok: boolean; pois?: Poi[]; error?: string };
-          try {
-            data = (await res.json()) as typeof data;
-          } catch {
-            setPoisError(`Blad serwera POI (HTTP ${res.status})`);
-            return;
-          }
-          if (data.ok && data.pois) setPois(data.pois);
-          else setPoisError(data.error ?? `HTTP ${res.status}`);
         })
         .catch((err: unknown) => {
           if (err instanceof Error && err.name === "AbortError") return;
-          setPoisError("Brak polaczenia z serwerem POI");
-        })
-        .finally(() => setPoisLoading(false));
-    }, 600);
+          if (attempt < RETRY_DELAYS.length) {
+            retryTimer = setTimeout(tryFetch, RETRY_DELAYS[attempt++]);
+          } else {
+            setPoisLoading(false);
+          }
+        });
+    };
+
+    const timer = setTimeout(tryFetch, 600);
 
     return () => {
       clearTimeout(timer);
+      clearTimeout(retryTimer);
       controller.abort();
     };
   }, [bbox]);
@@ -284,7 +282,6 @@ export function MapPanel({
 
         {poisOpen && (
           <div className={`flex flex-col gap-1 px-3 pb-2 border-t ${dividerCls}`}>
-            {poisError && <p className="pt-1 text-xs text-rose-500">{poisError}</p>}
             {ALL_CATEGORIES.map((cat) => {
               const cfg = POI_CONFIG[cat];
               const active = activeCategories.has(cat);
