@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { LangProvider } from "@/contexts/lang-context";
@@ -19,6 +19,12 @@ export const metadata: Metadata = {
   description: "Alerty pogodowe na trasie rowerowej",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,10 +33,10 @@ export default function RootLayout({
   return (
     <html
       lang="pl"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full overflow-hidden antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-white dark:bg-slate-950 transition-colors">
+      <body className="h-full overflow-hidden flex flex-col bg-white dark:bg-slate-950 transition-colors">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           <LangProvider>{children}</LangProvider>
         </ThemeProvider>

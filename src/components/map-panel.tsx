@@ -182,7 +182,15 @@ export function MapPanel({
     const timer = setTimeout(() => {
       setPoisLoading(true);
       setPoisError(null);
-      fetch(`/api/pois?${params.toString()}`, { signal: controller.signal })
+      const fetchOnce = () => fetch(`/api/pois?${params.toString()}`, { signal: controller.signal });
+      fetchOnce()
+        .then(async (res) => {
+          if (res.status >= 500) {
+            await new Promise((r) => setTimeout(r, 500));
+            return fetchOnce();
+          }
+          return res;
+        })
         .then(async (res) => {
           let data: { ok: boolean; pois?: Poi[]; error?: string };
           try {

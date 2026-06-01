@@ -378,7 +378,7 @@ export default function Home() {
   const errorCls    = `rounded-lg border px-3 py-2 text-xs ${isDark ? "border-rose-400/40 bg-rose-400/10 text-rose-200" : "border-rose-300 bg-rose-50 text-rose-700"}`;
 
   return (
-    <div className={`relative h-screen w-screen overflow-hidden transition-colors duration-300 ${isDark ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
+    <div className={`relative h-dvh w-full overflow-hidden transition-colors duration-300 ${isDark ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
 
       {/* Map — always rendered; offset by sidebar on desktop */}
       <div className="absolute inset-0 md:left-16">

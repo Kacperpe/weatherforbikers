@@ -9,6 +9,7 @@ const OVERPASS_URLS = [
 
 const poiCache = new Map<string, { pois: Poi[]; ts: number }>();
 const CACHE_TTL = 60 * 60 * 1000;
+const STALE_CACHE_TTL = 24 * 60 * 60 * 1000;
 const CACHE_MAX = 100;
 
 const MAX_BBOX_DELTA = 1.0;
@@ -136,7 +137,8 @@ export async function GET(request: NextRequest) {
 
   const cacheKey = roundBbox(minLat, minLon, maxLat, maxLon);
   const cached = poiCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+  const cacheAgeMs = cached ? Date.now() - cached.ts : Number.POSITIVE_INFINITY;
+  if (cached && cacheAgeMs < CACHE_TTL) {
     return Response.json({ ok: true, pois: cached.pois, cached: true }, {
       headers: { "Cache-Control": "public, max-age=3600" },
     });
@@ -159,6 +161,13 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("POI fetch failed:", err);
+    // Graceful degradation: if live provider fails, return stale cache instead of hard-failing UI.
+    if (cached && cacheAgeMs < STALE_CACHE_TTL) {
+      return Response.json(
+        { ok: true, pois: cached.pois, cached: true, stale: true, warning: "POI stale fallback" },
+        { headers: { "Cache-Control": "public, max-age=60" } },
+      );
+    }
     return Response.json(
       { ok: false, error: "Nie udalo sie pobrac POI. Sprobuj ponownie pozniej." },
       { status: 502 },
