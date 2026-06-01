@@ -189,7 +189,10 @@ export default function Home() {
     const now = Date.now();
     setNowMs(now);
     setRouteStartAt(toDateTimeLocalInputValue(new Date(now)));
-    setThemeMode(window.localStorage.getItem("theme-mode") === "light" ? "light" : "dark");
+    const savedTheme = window.localStorage.getItem("theme-mode");
+    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const resolved: ThemeMode = savedTheme === "light" ? "light" : savedTheme === "dark" ? "dark" : systemDark ? "dark" : "light";
+    setThemeMode(resolved);
 
     const ls = (key: string) => window.localStorage.getItem(key);
     const tu = ls("settings:tempUnit");
@@ -596,16 +599,10 @@ export default function Home() {
               <div className="p-4 space-y-4">
                 <div className={`flex items-center justify-between pb-3 border-b ${panelBorder}`}>
                   <span className="font-semibold">{t("settings.title")}</span>
-                  <div className={`flex rounded-lg border overflow-hidden text-xs font-semibold ${isDark ? "border-slate-700" : "border-slate-300"}`}>
-                    <button type="button" onClick={() => themeMode !== "dark" && toggleTheme()}
-                      className={`px-3 py-1.5 transition-colors ${isDark ? "bg-cyan-500/20 text-cyan-200" : "bg-transparent text-slate-400 hover:text-slate-600"}`}>
-                      🌙 {t("settings.theme.dark")}
-                    </button>
-                    <button type="button" onClick={() => themeMode !== "light" && toggleTheme()}
-                      className={`px-3 py-1.5 transition-colors border-l ${isDark ? "border-slate-700 bg-transparent text-slate-500 hover:text-slate-300" : "border-slate-300 bg-slate-200 text-slate-800"}`}>
-                      ☀️ {t("settings.theme.light")}
-                    </button>
-                  </div>
+                  <button type="button" onClick={toggleTheme}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${isDark ? "border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+                    {isDark ? `☀️ ${t("settings.theme.light")}` : `🌙 ${t("settings.theme.dark")}`}
+                  </button>
                 </div>
 
                 {/* Przełącznik języka */}
