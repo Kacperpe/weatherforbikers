@@ -164,6 +164,10 @@ export default function Home() {
   const [poiRadius, setPoiRadius] = useState(500);
   const [tempUnit, setTempUnit] = useState<"°C" | "°F">("°C");
   const [windUnit, setWindUnit] = useState<"km/h" | "m/s" | "mph" | "kn">("km/h");
+  useEffect(() => { window.localStorage.setItem("settings:tempUnit", tempUnit); }, [tempUnit]);
+  useEffect(() => { window.localStorage.setItem("settings:windUnit", windUnit); }, [windUnit]);
+  useEffect(() => { window.localStorage.setItem("settings:speedKmh", String(averageSpeedKmh)); }, [averageSpeedKmh]);
+  useEffect(() => { window.localStorage.setItem("settings:poiRadius", String(poiRadius)); }, [poiRadius]);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeStartAt, setRouteStartAt] = useState("");
   const [forecastLoading, setForecastLoading] = useState(false);
@@ -181,6 +185,17 @@ export default function Home() {
     setNowMs(now);
     setRouteStartAt(toDateTimeLocalInputValue(new Date(now)));
     setThemeMode(window.localStorage.getItem("theme-mode") === "light" ? "light" : "dark");
+
+    const saved = (key: string) => window.localStorage.getItem(key);
+    const tu = saved("settings:tempUnit");
+    if (tu === "°C" || tu === "°F") setTempUnit(tu);
+    const wu = saved("settings:windUnit");
+    if (wu === "km/h" || wu === "m/s" || wu === "mph" || wu === "kn") setWindUnit(wu);
+    const sp = Number(saved("settings:speedKmh"));
+    if (sp >= 1 && sp <= 200) setAverageSpeedKmh(sp);
+    const pr = Number(saved("settings:poiRadius"));
+    if ([250, 500, 1000, 2000].includes(pr)) setPoiRadius(pr);
+
     const timer = setInterval(() => setNowMs(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
