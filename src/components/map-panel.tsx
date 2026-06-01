@@ -132,6 +132,7 @@ export function MapPanel({
   const { t } = useLang();
   const [pois, setPois] = useState<Poi[]>([]);
   const [poisLoading, setPoisLoading] = useState(false);
+  const [poiProgress, setPoiProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [activeCategories, setActiveCategories] = useState<Set<PoiCategory>>(new Set(ALL_CATEGORIES));
   const [poisVisible, setPoisVisible] = useState(true);
   const [alertsVisible, setAlertsVisible] = useState(true);
@@ -216,21 +217,31 @@ export function MapPanel({
     };
 
     timer = setTimeout(() => {
+      setPois([]);
       setPoisLoading(true);
-      void Promise.allSettled(poisTiles.map(fetchTile)).then((results) => {
-        if (cancelled) return;
-        const seen = new Set<number>();
-        const merged: Poi[] = [];
-        for (const r of results) {
-          if (r.status === 'fulfilled') {
-            for (const poi of r.value) {
-              if (!seen.has(poi.id)) { seen.add(poi.id); merged.push(poi); }
-            }
+      setPoiProgress({ loaded: 0, total: poisTiles.length });
+      const seen = new Set<number>();
+      let loadedCount = 0;
+      for (const promise of poisTiles.map(fetchTile)) {
+        void promise.then((tilePois) => {
+          if (cancelled) return;
+          loadedCount++;
+          setPoiProgress({ loaded: loadedCount, total: poisTiles.length });
+          if (tilePois.length > 0) {
+            setPois((prev) => {
+              const next = [...prev];
+              for (const poi of tilePois) {
+                if (!seen.has(poi.id)) { seen.add(poi.id); next.push(poi); }
+              }
+              return next;
+            });
           }
-        }
-        setPois(merged);
-        setPoisLoading(false);
-      });
+          if (loadedCount === poisTiles.length) {
+            setPoisLoading(false);
+            setPoiProgress(null);
+          }
+        });
+      }
     }, 600);
 
     return () => {
@@ -293,6 +304,14 @@ export function MapPanel({
           hideTitle={t("map.hideAttractions")}
           showTitle={t("map.showAttractions")}
         />
+        {poiProgress !== null && poiProgress.total > 1 && (
+          <div className={`h-0.5 mx-3 mt-0.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-200"}`}>
+            <div
+              className="h-full bg-cyan-500 transition-[width] duration-500"
+              style={{ width: `${Math.round((poiProgress.loaded / poiProgress.total) * 100)}%` }}
+            />
+          </div>
+        )}
 
         {poisOpen && (
           <div className={`flex flex-col gap-1 px-3 pb-2 border-t ${dividerCls}`}>
