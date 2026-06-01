@@ -190,9 +190,7 @@ export default function Home() {
     setNowMs(now);
     setRouteStartAt(toDateTimeLocalInputValue(new Date(now)));
     const savedTheme = window.localStorage.getItem("theme-mode");
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const resolved: ThemeMode = savedTheme === "light" ? "light" : savedTheme === "dark" ? "dark" : systemDark ? "dark" : "light";
-    setThemeMode(resolved);
+    setThemeMode(savedTheme === "light" ? "light" : "dark");
 
     const ls = (key: string) => window.localStorage.getItem(key);
     const tu = ls("settings:tempUnit");

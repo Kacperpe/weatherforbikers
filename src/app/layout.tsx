@@ -37,13 +37,12 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* Runs before React — resolves theme from localStorage or system preference to prevent FOUC */}
+        {/* Runs before React — applies dark class from localStorage to prevent FOUC */}
         <Script id="theme-init" strategy="beforeInteractive">{`
           try {
-            var saved = localStorage.getItem('theme-mode');
-            var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            var dark = saved === 'dark' || (saved !== 'light' && systemDark);
-            document.documentElement.classList.toggle('dark', dark);
+            if (localStorage.getItem('theme-mode') !== 'light') {
+              document.documentElement.classList.add('dark');
+            }
           } catch(e) {}
         `}</Script>
       </head>
