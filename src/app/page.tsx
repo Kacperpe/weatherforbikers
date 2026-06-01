@@ -596,10 +596,16 @@ export default function Home() {
               <div className="p-4 space-y-4">
                 <div className={`flex items-center justify-between pb-3 border-b ${panelBorder}`}>
                   <span className="font-semibold">{t("settings.title")}</span>
-                  <button type="button" onClick={toggleTheme}
-                    className={`rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${isDark ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20" : "border-slate-400 bg-slate-200 text-slate-800 hover:bg-slate-300"}`}>
-                    {isDark ? t("settings.theme.light") : t("settings.theme.dark")}
-                  </button>
+                  <div className={`flex rounded-lg border overflow-hidden text-xs font-semibold ${isDark ? "border-slate-700" : "border-slate-300"}`}>
+                    <button type="button" onClick={() => themeMode !== "dark" && toggleTheme()}
+                      className={`px-3 py-1.5 transition-colors ${isDark ? "bg-cyan-500/20 text-cyan-200" : "bg-transparent text-slate-400 hover:text-slate-600"}`}>
+                      🌙 {t("settings.theme.dark")}
+                    </button>
+                    <button type="button" onClick={() => themeMode !== "light" && toggleTheme()}
+                      className={`px-3 py-1.5 transition-colors border-l ${isDark ? "border-slate-700 bg-transparent text-slate-500 hover:text-slate-300" : "border-slate-300 bg-slate-200 text-slate-800"}`}>
+                      ☀️ {t("settings.theme.light")}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Przełącznik języka */}
