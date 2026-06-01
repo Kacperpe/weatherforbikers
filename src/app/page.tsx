@@ -169,7 +169,6 @@ export default function Home() {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [forecastRows, setForecastRows] = useState<WeatherPointForecast[]>([]);
-  const [notifyEmail, setNotifyEmail] = useState("");
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
   const [nowMs, setNowMs] = useState(0);
   const maxForecastDate = useMemo(
@@ -569,25 +568,14 @@ export default function Home() {
                 )}
               </div>
 
-              {forecastRows.length > 0 && (
-                <div className={`shrink-0 border-t p-3 flex items-center gap-2 ${panelBorder}`}>
-                  <input
-                    type="email"
-                    value={notifyEmail}
-                    onChange={(e) => setNotifyEmail(e.target.value)}
-                    placeholder={t("weather.email")}
-                    className={`min-w-0 flex-1 rounded border px-2 py-1.5 text-xs outline-none ring-cyan-400/40 focus:ring ${isDark ? "border-slate-700 bg-slate-900 text-slate-200 placeholder-slate-600" : "border-slate-300 bg-white text-slate-800 placeholder-slate-400"}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCalendarClick}
-                    disabled={forecastRows.length === 0}
-                    title={forecastError ? "Prognoza jest niekompletna — uzupełnij dane przed pobraniem" : undefined}
-                    className={`shrink-0 rounded px-2 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark ? "bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25" : "bg-cyan-100 text-cyan-800 hover:bg-cyan-200"}`}>
-                    📅 {t("weather.calendar")}
-                  </button>
-                </div>
-              )}
+              <div className={`shrink-0 border-t px-3 py-2 ${panelBorder}`}>
+                <button
+                  type="button"
+                  onClick={handleCalendarClick}
+                  className={`w-full rounded px-2 py-1.5 text-xs font-semibold transition-colors ${isDark ? "bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25" : "bg-cyan-100 text-cyan-800 hover:bg-cyan-200"}`}>
+                  📅 {t("weather.calendar")}
+                </button>
+              </div>
             </div>
           )}
 

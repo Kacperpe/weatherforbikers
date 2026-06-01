@@ -160,7 +160,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
 
     if (points.length === 0) return;
 
-    L.polyline(points, { color: "#22d3ee", weight: 4 }).addTo(routeLayer);
+    L.polyline(points, { color: themeMode === "dark" ? "#22d3ee" : "#ef4444", weight: 4 }).addTo(routeLayer);
 
     L.circleMarker(points[0], { radius: 7, color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.95, weight: 2 })
       .bindTooltip(t("route.start"), { permanent: true, direction: "top", offset: [0, -10] })
