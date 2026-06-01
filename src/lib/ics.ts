@@ -31,6 +31,8 @@ function buildEvent({
   alarmMinutes?: number;
   notifyEmail?: string;
 }): string {
+  const sanitizedEmail = notifyEmail?.replace(/[\r\n\0]/g, "").trim();
+  const validEmail = sanitizedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizedEmail);
   const lines = [
     "BEGIN:VEVENT",
     `UID:${uid()}`,
@@ -47,14 +49,14 @@ function buildEvent({
       `DESCRIPTION:${esc(summary)}`,
       "END:VALARM",
     );
-    if (notifyEmail) {
+    if (validEmail) {
       lines.push(
         "BEGIN:VALARM",
         "ACTION:EMAIL",
         `TRIGGER:-PT${alarmMinutes}M`,
         `SUMMARY:${esc(summary)}`,
         `DESCRIPTION:${esc(description)}`,
-        `ATTENDEE:mailto:${notifyEmail}`,
+        `ATTENDEE:mailto:${sanitizedEmail}`,
         "END:VALARM",
       );
     }
@@ -63,31 +65,50 @@ function buildEvent({
   return lines.join("\r\n");
 }
 
-type AlertKind = "rain" | "wind" | "snow";
+type AlertKind = "storm" | "snow" | "rain" | "wind" | "cold" | "hot";
 
 type Alert = WeatherPointForecast & { kind: AlertKind };
+
+const ALERT_META: Record<AlertKind, { emoji: string; label: string }> = {
+  storm: { emoji: "⛈",  label: "Burza" },
+  snow:  { emoji: "❄️", label: "Śnieg" },
+  rain:  { emoji: "🌧",  label: "Deszcz" },
+  wind:  { emoji: "💨",  label: "Silny wiatr" },
+  cold:  { emoji: "🥶",  label: "Zimno" },
+  hot:   { emoji: "🌡",  label: "Upał" },
+};
 
 function detectAlerts(rows: WeatherPointForecast[]): Alert[] {
   const alerts: Alert[] = [];
   for (const row of rows) {
-    const rain = (row.precipitationProbability ?? 0) >= 40 || (row.rainMm ?? 0) > 0 || (row.precipitationMm ?? 0) > 0;
-    const wind = (row.windKmh ?? 0) > 50;
-    if (rain) alerts.push({ ...row, kind: "rain" });
-    if (wind && !rain) alerts.push({ ...row, kind: "wind" });
+    const code = row.weatherCode ?? 0;
+    const hasPrecip = (row.precipitationProbability ?? 0) >= 40 || (row.precipitationMm ?? 0) > 0 || (row.rainMm ?? 0) > 0;
+    if (code >= 95) alerts.push({ ...row, kind: "storm" });
+    else if (code >= 71 && code <= 77) alerts.push({ ...row, kind: "snow" });
+    else if (hasPrecip) alerts.push({ ...row, kind: "rain" });
+    if ((row.windKmh ?? 0) > 50) alerts.push({ ...row, kind: "wind" });
+    if (row.temperatureC !== null && row.temperatureC < 8) alerts.push({ ...row, kind: "cold" });
+    if (row.temperatureC !== null && row.temperatureC > 30) alerts.push({ ...row, kind: "hot" });
   }
   return alerts;
 }
 
 function alertEmoji(kind: AlertKind): string {
-  if (kind === "rain") return "🌧";
-  if (kind === "wind") return "💨";
-  return "❄️";
+  return ALERT_META[kind].emoji;
 }
 
 function alertLabel(kind: AlertKind): string {
-  if (kind === "rain") return "Deszcz";
-  if (kind === "wind") return "Silny wiatr";
-  return "Snieg";
+  return ALERT_META[kind].label;
+}
+
+function parseDatetimeLocal(value: string): Date {
+  // datetime-local input returns "YYYY-MM-DDTHH:mm" without timezone.
+  // new Date(str) has historically treated such strings as UTC in some browsers —
+  // using explicit Date(year, month, day, h, m) always yields local time.
+  const [datePart = "", timePart = "00:00"] = value.split("T");
+  const [year = 0, month = 1, day = 1] = datePart.split("-").map(Number);
+  const [hour = 0, minute = 0] = timePart.split(":").map(Number);
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
 }
 
 export function generateRouteIcs(
@@ -95,7 +116,7 @@ export function generateRouteIcs(
   routeStartAt: string,
   notifyEmail?: string,
 ): string {
-  const routeStart = new Date(routeStartAt);
+  const routeStart = parseDatetimeLocal(routeStartAt);
   const lastRow = forecastRows[forecastRows.length - 1];
   const routeEnd = lastRow
     ? new Date(routeStart.getTime() + lastRow.etaMinutes * 60_000)

@@ -2,10 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
+import { useLang } from "@/contexts/lang-context";
+import { POI_CONFIG } from "@/types/poi";
+import type { Poi, PoiCategory } from "@/types/poi";
 import type { RouteSegment } from "@/types/route-segment";
 import type { WeatherAlert } from "@/types/weather-alert";
-import type { Poi, PoiCategory } from "@/types/poi";
-import { POI_CONFIG } from "@/types/poi";
+import type { WeatherPointForecast } from "@/types/weather-point-forecast";
 
 const RouteMap = dynamic(
   () => import("@/components/route-map").then((module) => module.RouteMap),
@@ -13,22 +15,83 @@ const RouteMap = dynamic(
 );
 
 type ThemeMode = "dark" | "light";
+type LatLng = [number, number];
 
 type MapPanelProps = {
   segments: RouteSegment[];
   themeMode: ThemeMode;
   weatherAlerts: WeatherAlert[];
+  poiRadius: number;
+  forecastRows: WeatherPointForecast[];
+  tempUnit: "°C" | "°F";
+  windUnit: "km/h" | "m/s" | "mph" | "kn";
 };
 
-type LatLng = [number, number];
+type SectionHeaderProps = {
+  label: string;
+  count: number;
+  visible: boolean;
+  onVisibilityToggle: () => void;
+  open: boolean;
+  onOpenToggle: () => void;
+  hideTitle: string;
+  showTitle: string;
+};
 
 const ALL_CATEGORIES = Object.keys(POI_CONFIG) as PoiCategory[];
-const MAX_DISTANCE_M = 500;
+const STORAGE_KEYS = {
+  poisVisible: "map-panel:pois-visible",
+  alertsVisible: "map-panel:alerts-visible",
+  forecastVisible: "map-panel:forecast-visible",
+  poisOpen: "map-panel:pois-open",
+} as const;
+
+function readStoredBool(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const value = window.localStorage.getItem(key);
+  if (value === null) return fallback;
+  return value === "true";
+}
+
+function SectionHeader({
+  label,
+  count,
+  visible,
+  onVisibilityToggle,
+  open,
+  onOpenToggle,
+  hideTitle,
+  showTitle,
+}: SectionHeaderProps) {
+  return (
+    <div className="flex w-full items-center justify-between gap-2 px-3 py-2 text-xs font-semibold">
+      <button
+        type="button"
+        onClick={onVisibilityToggle}
+        title={visible ? hideTitle : showTitle}
+        className={`flex min-w-0 items-center gap-1.5 transition-opacity ${visible ? "opacity-100" : "opacity-40"}`}
+      >
+        <span className={`truncate transition-all ${!visible ? "line-through" : ""}`}>{label}</span>
+        <span className="shrink-0 opacity-70">({count})</span>
+      </button>
+      <button
+        type="button"
+        onClick={onOpenToggle}
+        className={`shrink-0 px-1 transition-transform duration-200 ${open ? "rotate-180" : "rotate-0"}`}
+      >
+        ▲
+      </button>
+    </div>
+  );
+}
 
 function distanceToSegmentM(
-  poiLat: number, poiLon: number,
-  aLat: number, aLon: number,
-  bLat: number, bLon: number,
+  poiLat: number,
+  poiLon: number,
+  aLat: number,
+  aLon: number,
+  bLat: number,
+  bLon: number,
 ): number {
   const latScale = 111320;
   const lonScale = 111320 * Math.cos((poiLat * Math.PI) / 180);
@@ -37,42 +100,62 @@ function distanceToSegmentM(
   const dx = (bLon - aLon) * lonScale;
   const dy = (bLat - aLat) * latScale;
   const lenSq = dx * dx + dy * dy;
-  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, (px * dx + py * dy) / lenSq));
-  return Math.sqrt((px - t * dx) ** 2 + (py - t * dy) ** 2);
+  const tVal = lenSq === 0 ? 0 : Math.max(0, Math.min(1, (px * dx + py * dy) / lenSq));
+  return Math.sqrt((px - tVal * dx) ** 2 + (py - tVal * dy) ** 2);
 }
 
-function isNearRoute(poi: Poi, segments: RouteSegment[]): boolean {
-  for (const seg of segments) {
-    const dist = distanceToSegmentM(
-      poi.lat, poi.lon,
-      seg.from[1], seg.from[0],
-      seg.to[1], seg.to[0],
-    );
-    if (dist <= MAX_DISTANCE_M) return true;
+function isNearRoute(poi: Poi, segments: RouteSegment[], maxDistM: number): boolean {
+  const padDeg = maxDistM / 111320;
+  const step = segments.length > 2000 ? Math.ceil(segments.length / 2000) : 1;
+  for (let i = 0; i < segments.length; i += step) {
+    const seg = segments[i];
+    if (
+      poi.lat < Math.min(seg.from[1], seg.to[1]) - padDeg ||
+      poi.lat > Math.max(seg.from[1], seg.to[1]) + padDeg ||
+      poi.lon < Math.min(seg.from[0], seg.to[0]) - padDeg ||
+      poi.lon > Math.max(seg.from[0], seg.to[0]) + padDeg
+    ) {
+      continue;
+    }
+    if (distanceToSegmentM(poi.lat, poi.lon, seg.from[1], seg.from[0], seg.to[1], seg.to[0]) <= maxDistM) {
+      return true;
+    }
   }
   return false;
 }
 
-export function MapPanel({ segments, themeMode, weatherAlerts }: MapPanelProps) {
-  const routePoints = useMemo<LatLng[]>(() => {
-    if (segments.length === 0) return [];
-    const points: LatLng[] = [[segments[0].from[1], segments[0].from[0]]];
-    for (const segment of segments) {
-      points.push([segment.to[1], segment.to[0]]);
-    }
-    return points;
-  }, [segments]);
-
+export function MapPanel({
+  segments,
+  themeMode,
+  weatherAlerts,
+  poiRadius,
+  forecastRows,
+  tempUnit,
+  windUnit,
+}: MapPanelProps) {
+  const { t } = useLang();
   const [pois, setPois] = useState<Poi[]>([]);
   const [poisLoading, setPoisLoading] = useState(false);
   const [poisError, setPoisError] = useState<string | null>(null);
   const [activeCategories, setActiveCategories] = useState<Set<PoiCategory>>(new Set(ALL_CATEGORIES));
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [poisVisible, setPoisVisible] = useState(() => readStoredBool(STORAGE_KEYS.poisVisible, true));
+  const [alertsVisible, setAlertsVisible] = useState(() => readStoredBool(STORAGE_KEYS.alertsVisible, true));
+  const [forecastVisible, setForecastVisible] = useState(() => readStoredBool(STORAGE_KEYS.forecastVisible, true));
+  const [poisOpen, setPoisOpen] = useState(() => readStoredBool(STORAGE_KEYS.poisOpen, true));
+
+  const routePoints = useMemo<LatLng[]>(() => {
+    if (segments.length === 0) return [];
+    const points: LatLng[] = [[segments[0].from[1], segments[0].from[0]]];
+    for (const segment of segments) points.push([segment.to[1], segment.to[0]]);
+    return points;
+  }, [segments]);
 
   const bbox = useMemo(() => {
     if (segments.length === 0) return null;
-    let minLat = Infinity, maxLat = -Infinity;
-    let minLon = Infinity, maxLon = -Infinity;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLon = Infinity;
+    let maxLon = -Infinity;
     for (const seg of segments) {
       const [fromLon, fromLat] = seg.from;
       const [toLon, toLat] = seg.to;
@@ -87,6 +170,7 @@ export function MapPanel({ segments, themeMode, weatherAlerts }: MapPanelProps) 
 
   useEffect(() => {
     if (!bbox) return;
+
     const controller = new AbortController();
     const params = new URLSearchParams({
       minLat: String(bbox.minLat),
@@ -94,24 +178,29 @@ export function MapPanel({ segments, themeMode, weatherAlerts }: MapPanelProps) 
       maxLat: String(bbox.maxLat),
       maxLon: String(bbox.maxLon),
     });
+
     const timer = setTimeout(() => {
       setPoisLoading(true);
       setPoisError(null);
       fetch(`/api/pois?${params.toString()}`, { signal: controller.signal })
         .then(async (res) => {
-          const data = (await res.json()) as { ok: boolean; pois?: Poi[]; error?: string };
-          if (data.ok && data.pois) {
-            setPois(data.pois);
-          } else {
-            setPoisError(data.error ?? `HTTP ${res.status}`);
+          let data: { ok: boolean; pois?: Poi[]; error?: string };
+          try {
+            data = (await res.json()) as typeof data;
+          } catch {
+            setPoisError(`Blad serwera POI (HTTP ${res.status})`);
+            return;
           }
+          if (data.ok && data.pois) setPois(data.pois);
+          else setPoisError(data.error ?? `HTTP ${res.status}`);
         })
         .catch((err: unknown) => {
           if (err instanceof Error && err.name === "AbortError") return;
-          setPoisError("Brak połączenia z serwerem POI");
+          setPoisError("Brak polaczenia z serwerem POI");
         })
         .finally(() => setPoisLoading(false));
     }, 600);
+
     return () => {
       clearTimeout(timer);
       controller.abort();
@@ -119,16 +208,30 @@ export function MapPanel({ segments, themeMode, weatherAlerts }: MapPanelProps) 
   }, [bbox]);
 
   const routeFilteredPois = useMemo(
-    () => pois.filter((poi) => isNearRoute(poi, segments)),
-    [pois, segments],
+    () => pois.filter((poi) => isNearRoute(poi, segments, poiRadius)),
+    [pois, segments, poiRadius],
   );
-
   const filteredPois = useMemo(
     () => routeFilteredPois.filter((poi) => activeCategories.has(poi.category)),
     [routeFilteredPois, activeCategories],
   );
 
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.poisVisible, String(poisVisible));
+  }, [poisVisible]);
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.alertsVisible, String(alertsVisible));
+  }, [alertsVisible]);
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.forecastVisible, String(forecastVisible));
+  }, [forecastVisible]);
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.poisOpen, String(poisOpen));
+  }, [poisOpen]);
+
   const isDark = themeMode === "dark";
+  const panelBase = isDark ? "border-slate-700/80 bg-slate-950/90 text-slate-200" : "border-slate-300/90 bg-white/95 text-slate-900";
+  const dividerCls = isDark ? "border-slate-700/40" : "border-slate-200";
 
   function toggleCategory(cat: PoiCategory) {
     setActiveCategories((prev) => {
@@ -139,67 +242,83 @@ export function MapPanel({ segments, themeMode, weatherAlerts }: MapPanelProps) 
     });
   }
 
-  const panelBase = isDark
-    ? "border-slate-700/80 bg-slate-950/90 text-slate-200"
-    : "border-slate-300/90 bg-white/92 text-slate-800";
-
   return (
     <section className={`absolute inset-0 transition-colors duration-300 ${isDark ? "bg-slate-950" : "bg-slate-100"}`}>
-      <RouteMap points={routePoints} themeMode={themeMode} weatherAlerts={weatherAlerts} pois={filteredPois} />
+      <RouteMap
+        points={routePoints}
+        themeMode={themeMode}
+        weatherAlerts={alertsVisible ? weatherAlerts : []}
+        pois={poisVisible ? filteredPois : []}
+        forecastRows={forecastVisible ? forecastRows : []}
+        tempUnit={tempUnit}
+        windUnit={windUnit}
+      />
 
-      {segments.length === 0 ? (
+      {segments.length === 0 && (
         <div className="pointer-events-none absolute inset-x-0 top-28 z-[500] flex justify-center px-4">
-          <p className={`rounded-xl border px-4 py-3 text-sm backdrop-blur transition-colors duration-300 ${isDark ? "border-slate-700/80 bg-slate-950/85 text-slate-300" : "border-slate-300 bg-white/90 text-slate-700"}`}>
-            Brak segmentow. Wczytaj plik GeoJSON lub GPX.
+          <p className={`rounded-xl border px-4 py-3 text-sm backdrop-blur ${isDark ? "border-slate-700/80 bg-slate-950/85 text-slate-300" : "border-slate-300 bg-white/95 text-slate-800"}`}>
+            {t("map.noRoute")}
           </p>
         </div>
-      ) : null}
+      )}
 
-      {segments.length > 0 ? (
-        <div className={`absolute bottom-20 left-3 z-[1000] rounded-xl border shadow-xl backdrop-blur md:bottom-6 ${panelBase}`}>
+      <div className={`absolute bottom-20 left-3 z-[1000] w-52 rounded-xl border shadow-xl backdrop-blur md:bottom-6 ${panelBase}`}>
+        <SectionHeader
+          label={`${t("map.attractions")}${poisLoading ? ` ${t("map.loading")}` : ""}`}
+          count={filteredPois.length}
+          visible={poisVisible}
+          onVisibilityToggle={() => setPoisVisible((v) => !v)}
+          open={poisOpen}
+          onOpenToggle={() => setPoisOpen((o) => !o)}
+          hideTitle={t("map.hideAttractions")}
+          showTitle={t("map.showAttractions")}
+        />
+
+        {poisOpen && (
+          <div className={`flex flex-col gap-1 px-3 pb-2 border-t ${dividerCls}`}>
+            {poisError && <p className="pt-1 text-xs text-rose-500">{poisError}</p>}
+            {ALL_CATEGORIES.map((cat) => {
+              const cfg = POI_CONFIG[cat];
+              const active = activeCategories.has(cat);
+              const count = routeFilteredPois.filter((p) => p.category === cat).length;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => toggleCategory(cat)}
+                  className={`flex items-center gap-2 rounded px-1 py-0.5 text-xs transition-opacity ${active ? "opacity-100" : "opacity-45"}`}
+                >
+                  <span className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-white/60" style={{ background: cfg.color }} />
+                  <span>{t(`poi.${cat}`)}</span>
+                  <span className="ml-auto opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className={`border-t ${dividerCls}`}>
           <button
             type="button"
-            onClick={() => setPanelOpen((o) => !o)}
-            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-xs font-semibold"
+            onClick={() => setAlertsVisible((v) => !v)}
+            className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-xs font-semibold transition-opacity ${alertsVisible ? "opacity-100" : "opacity-45"}`}
           >
-            <span className="flex items-center gap-2">
-              Atrakcje na trasie
-              {poisLoading && <span className="opacity-60">ładowanie...</span>}
-              {!poisLoading && !poisError && <span className="opacity-60">({filteredPois.length})</span>}
-              {poisError && <span className="text-rose-400">błąd</span>}
-            </span>
-            <span className={`transition-transform duration-200 ${panelOpen ? "rotate-180" : "rotate-0"}`}>▲</span>
+            <span className={`transition-all ${!alertsVisible ? "line-through" : ""}`}>⚠️ {t("map.weatherAlerts")}</span>
+            <span className="shrink-0 opacity-70">({weatherAlerts.length})</span>
           </button>
-
-          {panelOpen ? (
-            <>
-              {poisError ? (
-                <div className="px-3 pb-1 text-xs text-rose-400">{poisError}</div>
-              ) : null}
-              <div className={`flex flex-col gap-1 px-3 pb-2 border-t ${isDark ? "border-slate-700/40" : "border-slate-200"}`}>
-                {ALL_CATEGORIES.map((cat) => {
-                  const cfg = POI_CONFIG[cat];
-                  const active = activeCategories.has(cat);
-                  const count = routeFilteredPois.filter((p) => p.category === cat).length;
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => toggleCategory(cat)}
-                      className={`flex items-center gap-2 rounded px-1 py-0.5 text-xs transition-opacity ${active ? "opacity-100" : "opacity-40"}`}
-                    >
-                      <span className="inline-block h-3 w-3 flex-shrink-0 rounded-full border-2 border-white/60" style={{ background: cfg.color }} />
-                      <span>{cfg.label}</span>
-                      <span className="ml-auto opacity-60">{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-            </>
-          ) : null}
         </div>
-      ) : null}
+
+        <div className={`border-t ${dividerCls}`}>
+          <button
+            type="button"
+            onClick={() => setForecastVisible((v) => !v)}
+            className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-xs font-semibold transition-opacity ${forecastVisible ? "opacity-100" : "opacity-45"}`}
+          >
+            <span className={`transition-all ${!forecastVisible ? "line-through" : ""}`}>⛅ {t("map.forecastTimeline")}</span>
+            <span className="shrink-0 opacity-70">({forecastRows.length})</span>
+          </button>
+        </div>
+      </div>
     </section>
   );
 }

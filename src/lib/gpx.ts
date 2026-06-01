@@ -7,9 +7,15 @@ export function parseRouteGpx(raw: string, averageSpeedKmh: number): RouteSegmen
   if (parseError) throw new Error("Niepoprawny plik GPX.");
 
   const trkpts = Array.from(doc.querySelectorAll("trkpt"));
-  if (trkpts.length < 2) throw new Error("GPX nie zawiera wystarczającej liczby punktów trasy.");
+  const rtepts = trkpts.length < 2 ? Array.from(doc.querySelectorAll("rtept")) : [];
+  const pts = trkpts.length >= 2 ? trkpts : rtepts;
+  if (pts.length < 2) {
+    const hasRte = doc.querySelectorAll("rtept").length > 0;
+    if (hasRte) throw new Error("GPX zawiera trasę (rtept), nie ślad (trkpt). W aplikacji eksportuj jako 'ślad GPS', nie jako 'trasę'.");
+    throw new Error("GPX nie zawiera punktów trasy (trkpt). Upewnij się, że plik zawiera zarejestrowany ślad.");
+  }
 
-  const coords: [number, number][] = trkpts.map((pt) => {
+  const coords: [number, number][] = pts.map((pt) => {
     const lat = parseFloat(pt.getAttribute("lat") ?? "");
     const lon = parseFloat(pt.getAttribute("lon") ?? "");
     if (isNaN(lat) || isNaN(lon)) throw new Error("Niepoprawne współrzędne w GPX.");

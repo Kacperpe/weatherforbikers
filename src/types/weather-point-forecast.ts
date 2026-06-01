@@ -1,6 +1,7 @@
 export type WeatherPointForecast = {
   segmentId: string;
   etaMinutes: number;
+  distanceKmFromStart: number;
   lat: number;
   lon: number;
   plannedAtRouteTz: string;

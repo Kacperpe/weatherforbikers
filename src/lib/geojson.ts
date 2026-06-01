@@ -1,4 +1,5 @@
 import type { RouteSegment } from "@/types/route-segment";
+import { MAX_ROUTE_INPUT_POINTS, MAX_ROUTE_RENDER_POINTS } from "@/lib/route-limits";
 
 type Coordinates = [number, number];
 
@@ -14,22 +15,51 @@ function haversineKm(a: Coordinates, b: Coordinates) {
   return 2 * 6371 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-function toSegments(points: Coordinates[], averageSpeedKmh: number) {
+function downsamplePoints(points: Coordinates[], target: number): Coordinates[] {
+  if (points.length <= target) return points;
+  const stride = (points.length - 1) / (target - 1);
+  const out: Coordinates[] = [points[0]];
+  for (let i = 1; i < target - 1; i += 1) {
+    out.push(points[Math.round(i * stride)]);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+export function toSegments(points: Coordinates[], averageSpeedKmh: number) {
+  if (averageSpeedKmh <= 0) throw new Error("Predkosc musi byc wieksza od 0.");
+  if (points.length > MAX_ROUTE_INPUT_POINTS) {
+    throw new Error(`Trasa ma zbyt wiele punktow (${points.length}). Limit: ${MAX_ROUTE_INPUT_POINTS}.`);
+  }
+
+  const deduped: Coordinates[] = points.length > 0 ? [points[0]] : [];
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = deduped[deduped.length - 1];
+    if (points[i][0] !== prev[0] || points[i][1] !== prev[1]) deduped.push(points[i]);
+  }
+
+  const simplified = deduped.length > MAX_ROUTE_RENDER_POINTS
+    ? downsamplePoints(deduped, MAX_ROUTE_RENDER_POINTS)
+    : deduped;
+
   const segments: RouteSegment[] = [];
   let totalMinutes = 0;
+  let totalDistanceKm = 0;
 
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const from = points[i];
-    const to = points[i + 1];
+  for (let i = 0; i < simplified.length - 1; i += 1) {
+    const from = simplified[i];
+    const to = simplified[i + 1];
     const distanceKm = Number(haversineKm(from, to).toFixed(2));
     const segmentMinutes = (distanceKm / averageSpeedKmh) * 60;
     totalMinutes += segmentMinutes;
+    totalDistanceKm += distanceKm;
 
     segments.push({
       id: `S-${String(i + 1).padStart(3, "0")}`,
       from,
       to,
       distanceKm,
+      cumulativeDistanceKm: Number(totalDistanceKm.toFixed(1)),
       etaMinutesFromStart: Math.round(totalMinutes),
     });
   }
@@ -37,59 +67,49 @@ function toSegments(points: Coordinates[], averageSpeedKmh: number) {
   return segments;
 }
 
-function parseRouteGeoJson(raw: string, averageSpeedKmh: number) {
-  const data = JSON.parse(raw) as
-    | {
-        type: "FeatureCollection";
-        features?: Array<{
-          geometry?: { type?: string; coordinates?: Coordinates[] };
-        }>;
-      }
-    | { type?: string; coordinates?: Coordinates[] };
+type GeoJsonGeometry =
+  | { type: "LineString"; coordinates: Coordinates[] }
+  | { type: "MultiLineString"; coordinates: Coordinates[][] };
 
-  if (data.type === "LineString" && Array.isArray(data.coordinates)) {
-    return toSegments(data.coordinates, averageSpeedKmh);
-  }
+type GeoJsonFeature = { type: "Feature"; geometry?: GeoJsonGeometry };
 
-  if (
-    data.type === "FeatureCollection" &&
-    "features" in data &&
-    Array.isArray(data.features)
-  ) {
-    const line = data.features.find(
-      (f: { geometry?: { type?: string; coordinates?: Coordinates[] } }) =>
-        f.geometry?.type === "LineString" && Array.isArray(f.geometry.coordinates),
+type GeoJsonDoc =
+  | GeoJsonGeometry
+  | GeoJsonFeature
+  | { type: "FeatureCollection"; features?: GeoJsonFeature[] };
+
+function extractCoordinates(data: GeoJsonDoc): Coordinates[] | null {
+  if (data.type === "LineString") return data.coordinates;
+  if (data.type === "MultiLineString") {
+    const longest = data.coordinates.reduce(
+      (best, line) => (line.length > best.length ? line : best),
+      [] as Coordinates[],
     );
-
-    if (line?.geometry?.coordinates) {
-      return toSegments(line.geometry.coordinates, averageSpeedKmh);
+    return longest.length >= 2 ? longest : null;
+  }
+  if (data.type === "Feature") {
+    if (!data.geometry) return null;
+    return extractCoordinates(data.geometry);
+  }
+  if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
+    for (const f of data.features) {
+      const coords = extractCoordinates(f);
+      if (coords && coords.length >= 2) return coords;
     }
   }
-
-  throw new Error(
-    "Niepoprawny GeoJSON: oczekiwany LineString lub FeatureCollection z LineString.",
-  );
+  return null;
 }
 
-function parseRouteGpx(raw: string, averageSpeedKmh: number) {
-  const matches = [...raw.matchAll(/<trkpt[^>]*lat="([^"]+)"[^>]*lon="([^"]+)"[^>]*>/g)];
-  const points: Coordinates[] = matches
-    .map((m) => [Number(m[2]), Number(m[1])] as Coordinates)
-    .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
-
-  if (points.length < 2) {
-    throw new Error("Niepoprawny GPX: brak punktow trasy (trkpt).");
+export function parseRouteGeoJson(raw: string, averageSpeedKmh: number) {
+  let data: GeoJsonDoc;
+  try {
+    data = JSON.parse(raw) as GeoJsonDoc;
+  } catch {
+    throw new Error("Niepoprawny format JSON.");
   }
-
-  return toSegments(points, averageSpeedKmh);
-}
-
-export function parseRouteFile(raw: string, filename: string, averageSpeedKmh: number) {
-  const lower = filename.toLowerCase();
-
-  if (lower.endsWith(".gpx")) {
-    return parseRouteGpx(raw, averageSpeedKmh);
+  const coords = extractCoordinates(data);
+  if (!coords || coords.length < 2) {
+    throw new Error("Niepoprawny GeoJSON: oczekiwany przebieg trasy.");
   }
-
-  return parseRouteGeoJson(raw, averageSpeedKmh);
+  return toSegments(coords, averageSpeedKmh);
 }

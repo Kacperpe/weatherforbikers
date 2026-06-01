@@ -6,6 +6,8 @@ import type * as LeafletType from "leaflet";
 import type { Poi, PoiCategory } from "@/types/poi";
 import { POI_CONFIG } from "@/types/poi";
 import type { WeatherAlert, WeatherAlertKind } from "@/types/weather-alert";
+import type { WeatherPointForecast } from "@/types/weather-point-forecast";
+import { useLang } from "@/contexts/lang-context";
 
 type LatLng = [number, number];
 
@@ -14,16 +16,21 @@ type RouteMapProps = {
   themeMode: "dark" | "light";
   weatherAlerts: WeatherAlert[];
   pois: Poi[];
+  forecastRows: WeatherPointForecast[];
+  tempUnit: "°C" | "°F";
+  windUnit: "km/h" | "m/s" | "mph" | "kn";
 };
 
 const KIND_CONFIG: Record<WeatherAlertKind, { color: string; emoji: string; label: string }> = {
-  rain: { color: "#f59e0b", emoji: "🌧", label: "Deszcz" },
-  wind: { color: "#a78bfa", emoji: "💨", label: "Silny wiatr" },
-  cold: { color: "#22d3ee", emoji: "🥶", label: "Zimno" },
-  hot:  { color: "#f87171", emoji: "🌡", label: "Upał" },
+  storm: { color: "#7c3aed", emoji: "⛈",  label: "Burza" },
+  snow:  { color: "#93c5fd", emoji: "❄️", label: "Śnieg" },
+  rain:  { color: "#3b82f6", emoji: "🌧",  label: "Deszcz" },
+  wind:  { color: "#a78bfa", emoji: "💨",  label: "Silny wiatr" },
+  cold:  { color: "#22d3ee", emoji: "🥶",  label: "Zimno" },
+  hot:   { color: "#f87171", emoji: "🌡",  label: "Upał" },
 };
 
-const KIND_PRIORITY: WeatherAlertKind[] = ["rain", "wind", "cold", "hot"];
+const KIND_PRIORITY: WeatherAlertKind[] = ["storm", "snow", "rain", "wind", "cold", "hot"];
 
 const POI_EMOJI: Record<PoiCategory, string> = {
   restaurant:    "🍴",
@@ -40,6 +47,12 @@ const TILE_LIGHT = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const ATTR_DARK = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
 const ATTR_LIGHT = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
+const FORECAST_ZOOM_THRESHOLD = 10;
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function primaryKind(kinds: WeatherAlertKind[]): WeatherAlertKind {
   for (const k of KIND_PRIORITY) {
     if (kinds.includes(k)) return k;
@@ -54,7 +67,23 @@ function alertRadius(alert: WeatherAlert): number {
   return 10;
 }
 
-export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapProps) {
+function weatherIcon(code: number | null): string {
+  if (code === null) return "—";
+  if (code === 0)    return "☀️";
+  if (code <= 3)     return "⛅";
+  if (code <= 48)    return "🌫";
+  if (code <= 55)    return "🌦";
+  if (code <= 67)    return "🌧";
+  if (code <= 77)    return "❄️";
+  if (code <= 82)    return "🌧";
+  if (code <= 86)    return "🌨";
+  if (code <= 94)    return "🌨";
+  if (code >= 95)    return "⛈";
+  return "⛅";
+}
+
+export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows, tempUnit, windUnit }: RouteMapProps) {
+  const { t } = useLang();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletType.Map | null>(null);
   const leafletRef = useRef<typeof LeafletType | null>(null);
@@ -62,7 +91,9 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
   const routeLayerRef = useRef<LeafletType.LayerGroup | null>(null);
   const alertLayerRef = useRef<LeafletType.LayerGroup | null>(null);
   const poiLayerRef = useRef<LeafletType.LayerGroup | null>(null);
+  const forecastLayerRef = useRef<LeafletType.LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(7);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -78,6 +109,10 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
       routeLayerRef.current = L.layerGroup().addTo(map);
       alertLayerRef.current = L.layerGroup().addTo(map);
       poiLayerRef.current = L.layerGroup().addTo(map);
+      forecastLayerRef.current = L.layerGroup(); // not added to map yet — zoom-gated
+
+      map.on("zoomend", () => setZoomLevel(map.getZoom()));
+
       setMapReady(true);
     })();
 
@@ -88,9 +123,11 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
       routeLayerRef.current?.clearLayers();
       alertLayerRef.current?.clearLayers();
       poiLayerRef.current?.clearLayers();
+      forecastLayerRef.current?.clearLayers();
       routeLayerRef.current = null;
       alertLayerRef.current = null;
       poiLayerRef.current = null;
+      forecastLayerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       leafletRef.current = null;
@@ -98,6 +135,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
     };
   }, []);
 
+  // Tile layer (theme switch)
   useEffect(() => {
     const L = leafletRef.current;
     const map = mapRef.current;
@@ -111,6 +149,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
     }).addTo(map);
   }, [mapReady, themeMode]);
 
+  // Route polyline + START/END markers
   useEffect(() => {
     const L = leafletRef.current;
     const map = mapRef.current;
@@ -124,22 +163,42 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
     L.polyline(points, { color: "#22d3ee", weight: 4 }).addTo(routeLayer);
 
     L.circleMarker(points[0], { radius: 7, color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.95, weight: 2 })
-      .bindTooltip("START", { permanent: true, direction: "top", offset: [0, -10] })
+      .bindTooltip(t("route.start"), { permanent: true, direction: "top", offset: [0, -10] })
       .addTo(routeLayer);
 
     L.circleMarker(points[points.length - 1], { radius: 7, color: "#ef4444", fillColor: "#ef4444", fillOpacity: 0.95, weight: 2 })
-      .bindTooltip("KONIEC", { permanent: true, direction: "top", offset: [0, -10] })
+      .bindTooltip(t("route.end"), { permanent: true, direction: "top", offset: [0, -10] })
       .addTo(routeLayer);
 
-    map.fitBounds(points, { padding: [36, 36] });
-  }, [mapReady, points]);
+    const uniquePoints = new Set(points.map(String));
+    if (uniquePoints.size === 1) {
+      map.setView(points[0], 14);
+    } else {
+      map.fitBounds(points, { padding: [36, 36] });
+    }
+  }, [mapReady, points, t]);
 
+  // Alert circles
   useEffect(() => {
     const L = leafletRef.current;
     const alertLayer = alertLayerRef.current;
     if (!mapReady || !L || !alertLayer) return;
 
     alertLayer.clearLayers();
+
+    function fmtTemp(c: number | null): string {
+      if (c === null) return "—";
+      if (tempUnit === "°F") return `${Math.round((c * 9) / 5 + 32)}${tempUnit}`;
+      return `${c}${tempUnit}`;
+    }
+
+    function fmtWind(kmh: number | null): string {
+      if (kmh === null) return "—";
+      if (windUnit === "m/s") return `${(kmh / 3.6).toFixed(1)} ${windUnit}`;
+      if (windUnit === "mph") return `${(kmh / 1.60934).toFixed(1)} ${windUnit}`;
+      if (windUnit === "kn")  return `${(kmh / 1.852).toFixed(1)} ${windUnit}`;
+      return `${kmh} ${windUnit}`;
+    }
 
     for (const alert of weatherAlerts) {
       const pk = primaryKind(alert.kinds);
@@ -150,22 +209,26 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
       const kindRows = alert.kinds.map((k) => {
         const cfg = KIND_CONFIG[k];
         let detail = "";
-        if (k === "rain") detail = `${alert.rainMm ?? alert.precipitationMm ?? 0} mm · ${alert.precipitationProbability ?? 0}% szans`;
-        if (k === "wind") detail = `${alert.windKmh ?? "—"} km/h`;
-        if (k === "cold" || k === "hot") detail = `${alert.temperatureC}°C`;
+        if (k === "rain" || k === "storm" || k === "snow") detail = `${alert.rainMm ?? alert.precipitationMm ?? 0} mm · ${alert.precipitationProbability ?? 0}%`;
+        if (k === "wind") detail = fmtWind(alert.windKmh ?? null);
+        if (k === "cold" || k === "hot") detail = fmtTemp(alert.temperatureC);
         return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <span style="background:${cfg.color}28;color:${cfg.color};border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;border:1px solid ${cfg.color}55;white-space:nowrap">${cfg.emoji} ${cfg.label}</span>
+          <span style="background:${cfg.color}28;color:${cfg.color};border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;border:1px solid ${cfg.color}55;white-space:nowrap">${cfg.emoji} ${esc(t(`alert.${k}`))}</span>
           <span style="color:#374151;font-weight:600">${detail}</span>
         </div>`;
       }).join("");
 
+      const etaH = Math.floor(alert.etaMinutes / 60);
+      const etaMin = alert.etaMinutes % 60;
+      const etaLabel = etaH > 0 ? `+${etaH}h ${etaMin}min` : `+${etaMin}min`;
+
       const popup = `<div style="min-width:190px;font-family:system-ui,sans-serif;font-size:12px;line-height:1.6">
-        <div style="font-weight:700;font-size:14px;margin-bottom:2px">${emojis} ${alert.segmentId}</div>
-        <div style="color:#94a3b8;font-size:11px;margin-bottom:10px">${alert.plannedAtRouteTz}</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:2px">${emojis} ${esc(alert.plannedAtRouteTz)}</div>
+        <div style="color:#94a3b8;font-size:11px;margin-bottom:10px">${etaLabel}</div>
         ${kindRows}
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid #e2e8f0;color:#64748b;font-size:11px;display:flex;gap:12px">
-          <span>🌡 ${alert.temperatureC !== null ? `${alert.temperatureC}°C` : "—"}</span>
-          <span>💨 ${alert.windKmh !== null ? `${alert.windKmh} km/h` : "—"}</span>
+          <span>🌡 ${fmtTemp(alert.temperatureC)}</span>
+          <span>💨 ${fmtWind(alert.windKmh)}</span>
         </div>
       </div>`;
 
@@ -179,8 +242,9 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
         .bindPopup(popup)
         .addTo(alertLayer);
     }
-  }, [mapReady, weatherAlerts]);
+  }, [mapReady, weatherAlerts, tempUnit, windUnit, t]);
 
+  // POI markers
   useEffect(() => {
     const L = leafletRef.current;
     const poiLayer = poiLayerRef.current;
@@ -191,8 +255,9 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
     for (const poi of pois) {
       const cfg = POI_CONFIG[poi.category];
       const emoji = POI_EMOJI[poi.category];
+      const catLabel = t(`poi.${poi.category}`);
       const icon = L.divIcon({
-        html: `<div title="${cfg.label}" style="background:${cfg.color};border:2.5px solid white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer;">${emoji}</div>`,
+        html: `<div title="${esc(catLabel)}" style="background:${cfg.color};border:2.5px solid white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:pointer;">${emoji}</div>`,
         className: "",
         iconSize: [30, 30],
         iconAnchor: [15, 15],
@@ -200,13 +265,106 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois }: RouteMapPro
       });
 
       const popup = `<div style="min-width:120px">
-        <div style="font-weight:600;font-size:13px">${poi.name ?? cfg.label}</div>
-        ${poi.name ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${cfg.label}</div>` : ""}
+        <div style="font-weight:600;font-size:13px">${esc(poi.name ?? catLabel)}</div>
+        ${poi.name ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${esc(catLabel)}</div>` : ""}
       </div>`;
 
       L.marker([poi.lat, poi.lon], { icon }).bindPopup(popup).addTo(poiLayer);
     }
-  }, [mapReady, pois]);
+  }, [mapReady, pois, t]);
+
+  // Forecast chips (non-alert points only) — rebuild when data/theme/lang/units change
+  useEffect(() => {
+    const L = leafletRef.current;
+    const forecastLayer = forecastLayerRef.current;
+    if (!mapReady || !L || !forecastLayer) return;
+
+    forecastLayer.clearLayers();
+
+    const alertIds = new Set(weatherAlerts.map((a) => a.segmentId));
+    const isDark = themeMode === "dark";
+
+    const bg     = isDark ? "rgba(15,23,42,0.88)"    : "rgba(255,255,255,0.93)";
+    const border = isDark ? "rgba(255,255,255,0.13)" : "rgba(0,0,0,0.13)";
+    const color  = isDark ? "#e2e8f0"                : "#1e293b";
+
+    function fmtTemp(c: number | null): string {
+      if (c === null) return "—";
+      if (tempUnit === "°F") return `${Math.round((c * 9) / 5 + 32)}${tempUnit}`;
+      return `${c}${tempUnit}`;
+    }
+
+    function fmtWind(kmh: number | null): string {
+      if (kmh === null) return "—";
+      if (windUnit === "m/s") return `${(kmh / 3.6).toFixed(1)} ${windUnit}`;
+      if (windUnit === "mph") return `${(kmh / 1.60934).toFixed(1)} ${windUnit}`;
+      if (windUnit === "kn")  return `${(kmh / 1.852).toFixed(1)} ${windUnit}`;
+      return `${kmh} ${windUnit}`;
+    }
+
+    for (const row of forecastRows) {
+      if (alertIds.has(row.segmentId)) continue;
+
+      const icon = weatherIcon(row.weatherCode);
+      const temp = fmtTemp(row.temperatureC);
+      const wind = fmtWind(row.windKmh);
+      const rain = row.precipitationProbability !== null ? `${row.precipitationProbability}%` : "—";
+
+      const chipHtml = `<div style="
+        background:${bg};
+        border:1px solid ${border};
+        border-radius:8px;
+        padding:3px 8px;
+        font-size:11px;
+        font-family:system-ui,sans-serif;
+        color:${color};
+        white-space:nowrap;
+        box-shadow:0 2px 8px rgba(0,0,0,0.35);
+        transform:translate(-50%,-115%);
+        display:inline-flex;
+        align-items:center;
+        gap:5px;
+        cursor:pointer;
+        pointer-events:auto;
+      ">${icon} ${temp}&nbsp;💨${wind}&nbsp;🌧${rain}</div>`;
+
+      const divIcon = L.divIcon({
+        html: chipHtml,
+        className: "",
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      const etaH   = Math.floor(row.etaMinutes / 60);
+      const etaMin = row.etaMinutes % 60;
+      const etaLabel = etaH > 0 ? `+${etaH}h ${etaMin}min` : `+${etaMin}min`;
+
+      const popup = `<div style="min-width:170px;font-family:system-ui,sans-serif;font-size:12px;line-height:1.7">
+        <div style="font-weight:700;font-size:13px;margin-bottom:2px">${icon} ${esc(row.plannedAtRouteTz)}</div>
+        <div style="color:#94a3b8;font-size:11px;margin-bottom:8px">${etaLabel} · ${Math.round(row.distanceKmFromStart)} km</div>
+        <div>🌡 ${fmtTemp(row.temperatureC)} <span style="color:#94a3b8;font-size:11px">(odcz. ${fmtTemp(row.apparentTemperatureC)})</span></div>
+        <div>💨 ${fmtWind(row.windKmh)} <span style="color:#94a3b8;font-size:11px">(porywy ${fmtWind(row.windGustsKmh)})</span></div>
+        <div>🌧 ${row.precipitationProbability ?? 0}% · ${row.rainMm ?? row.precipitationMm ?? 0} mm</div>
+      </div>`;
+
+      L.marker([row.lat, row.lon], { icon: divIcon, zIndexOffset: 500 })
+        .bindPopup(popup)
+        .addTo(forecastLayer);
+    }
+  }, [mapReady, forecastRows, weatherAlerts, themeMode, tempUnit, windUnit, t]);
+
+  // Show/hide forecast layer based on zoom
+  useEffect(() => {
+    const map = mapRef.current;
+    const forecastLayer = forecastLayerRef.current;
+    if (!mapReady || !map || !forecastLayer) return;
+
+    if (zoomLevel >= FORECAST_ZOOM_THRESHOLD) {
+      if (!map.hasLayer(forecastLayer)) forecastLayer.addTo(map);
+    } else {
+      if (map.hasLayer(forecastLayer)) forecastLayer.remove();
+    }
+  }, [mapReady, zoomLevel]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

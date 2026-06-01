@@ -3,5 +3,6 @@ export type RouteSegment = {
   from: [number, number];
   to: [number, number];
   distanceKm: number;
+  cumulativeDistanceKm: number;
   etaMinutesFromStart: number;
 };

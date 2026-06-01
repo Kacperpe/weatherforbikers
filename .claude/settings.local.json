@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Kacper\\\\OneDrive\\\\.STARTUP\\\\MapaPogodyWTrakcieRowerowania\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

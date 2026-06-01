@@ -17,6 +17,8 @@ function toDateOnly(iso: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const FORECAST_MAX_MS = 16 * 24 * 60 * 60 * 1000;
+  const SAFETY_BUFFER_MS = 60 * 60 * 1000;
   const lat = Number(request.nextUrl.searchParams.get("lat"));
   const lon = Number(request.nextUrl.searchParams.get("lon"));
   const timeIso = request.nextUrl.searchParams.get("time");
@@ -43,9 +45,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Open-Meteo supports max 16-day forecast
+  // Open-Meteo supports max 16-day forecast; keep a small buffer to avoid edge race.
   const nowMs = Date.now();
-  if (target.getTime() > nowMs + 16 * 24 * 60 * 60 * 1000 || target.getTime() < nowMs - 24 * 60 * 60 * 1000) {
+  if (
+    target.getTime() > nowMs + FORECAST_MAX_MS - SAFETY_BUFFER_MS ||
+    target.getTime() < nowMs - 24 * 60 * 60 * 1000
+  ) {
     return NextResponse.json(
       { ok: false, error: "Time out of forecast range (max 16 days ahead)." },
       { status: 400 },

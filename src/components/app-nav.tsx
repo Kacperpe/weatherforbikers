@@ -1,12 +1,8 @@
 "use client";
 
-export type AppTab = "map" | "weather" | "settings";
+import { useLang } from "@/contexts/lang-context";
 
-const TABS: { id: AppTab; icon: string; label: string }[] = [
-  { id: "map",      icon: "🗺",  label: "Mapa"    },
-  { id: "weather",  icon: "⛅",  label: "Pogoda"  },
-  { id: "settings", icon: "⚙️", label: "Trasa"   },
-];
+export type AppTab = "map" | "weather" | "settings";
 
 type Props = {
   activeTab: AppTab;
@@ -16,6 +12,12 @@ type Props = {
 };
 
 export function AppNav({ activeTab, onTabChange, isDark, alertCount }: Props) {
+  const { t } = useLang();
+  const TABS: { id: AppTab; icon: string; labelKey: string }[] = [
+    { id: "map",      icon: "🗺",  labelKey: "nav.map"      },
+    { id: "weather",  icon: "⛅",  labelKey: "nav.weather"  },
+    { id: "settings", icon: "⚙️", labelKey: "nav.settings" },
+  ];
   const navBg = isDark
     ? "bg-slate-950/95 border-slate-700/80"
     : "bg-white/95 border-slate-300/90";
@@ -38,7 +40,7 @@ export function AppNav({ activeTab, onTabChange, isDark, alertCount }: Props) {
             className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${itemCls(tab.id)}`}
           >
             <span className="text-xl leading-none">{tab.icon}</span>
-            <span className="text-xs font-medium">{tab.label}</span>
+            <span className="text-xs font-medium">{t(tab.labelKey)}</span>
             {tab.id === "weather" && alertCount > 0 && (
               <span className="absolute right-[calc(50%-18px)] top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
                 {alertCount > 9 ? "9+" : alertCount}
@@ -58,7 +60,7 @@ export function AppNav({ activeTab, onTabChange, isDark, alertCount }: Props) {
             className={`relative flex flex-col items-center justify-center gap-1 py-5 transition-colors ${itemCls(tab.id)}`}
           >
             <span className="text-2xl leading-none">{tab.icon}</span>
-            <span className="text-[9px] font-medium">{tab.label}</span>
+            <span className="text-[9px] font-medium">{t(tab.labelKey)}</span>
             {tab.id === "weather" && alertCount > 0 && (
               <span className="absolute right-1 top-2 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
                 {alertCount > 9 ? "9+" : alertCount}

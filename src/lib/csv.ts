@@ -32,6 +32,18 @@ export function parseRouteCsv(raw: string, speedKmh: number): RouteSegment[] {
       "Nie znaleziono kolumn lat/lon w CSV. Wymagane nagłówki: lat, lon (lub latitude, longitude).",
     );
 
+  // Detect European decimal format ambiguity: if sep is "," but first data row has more
+  // columns than headers, the values likely use "," as decimal separator too.
+  if (sep === ",") {
+    const firstDataCols = lines[1].split(",").length;
+    if (firstDataCols > headers.length) {
+      throw new Error(
+        "CSV używa przecinka zarówno jako separatora kolumn, jak i separatora dziesiętnego — nie można bezpiecznie rozdzielić danych. " +
+        "Wyeksportuj plik ponownie używając średnika (;) jako separatora kolumn.",
+      );
+    }
+  }
+
   const coords: Coord[] = lines
     .slice(1)
     .map((line) => {
