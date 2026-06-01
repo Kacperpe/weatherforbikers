@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "@/contexts/lang-context";
 import { POI_CONFIG } from "@/types/poi";
 import type { Poi, PoiCategory } from "@/types/poi";
@@ -46,12 +46,6 @@ const STORAGE_KEYS = {
   poisOpen: "map-panel:pois-open",
 } as const;
 
-function readStoredBool(key: string, fallback: boolean): boolean {
-  if (typeof window === "undefined") return fallback;
-  const value = window.localStorage.getItem(key);
-  if (value === null) return fallback;
-  return value === "true";
-}
 
 function SectionHeader({
   label,
@@ -137,10 +131,23 @@ export function MapPanel({
   const [pois, setPois] = useState<Poi[]>([]);
   const [poisLoading, setPoisLoading] = useState(false);
   const [activeCategories, setActiveCategories] = useState<Set<PoiCategory>>(new Set(ALL_CATEGORIES));
-  const [poisVisible, setPoisVisible] = useState(() => readStoredBool(STORAGE_KEYS.poisVisible, true));
-  const [alertsVisible, setAlertsVisible] = useState(() => readStoredBool(STORAGE_KEYS.alertsVisible, true));
-  const [forecastVisible, setForecastVisible] = useState(() => readStoredBool(STORAGE_KEYS.forecastVisible, true));
-  const [poisOpen, setPoisOpen] = useState(() => readStoredBool(STORAGE_KEYS.poisOpen, true));
+  const [poisVisible, setPoisVisible] = useState(true);
+  const [alertsVisible, setAlertsVisible] = useState(true);
+  const [forecastVisible, setForecastVisible] = useState(true);
+  const [poisOpen, setPoisOpen] = useState(true);
+  const settingsLoaded = useRef(false);
+  useEffect(() => { if (settingsLoaded.current) window.localStorage.setItem(STORAGE_KEYS.poisVisible, String(poisVisible)); }, [poisVisible]);
+  useEffect(() => { if (settingsLoaded.current) window.localStorage.setItem(STORAGE_KEYS.alertsVisible, String(alertsVisible)); }, [alertsVisible]);
+  useEffect(() => { if (settingsLoaded.current) window.localStorage.setItem(STORAGE_KEYS.forecastVisible, String(forecastVisible)); }, [forecastVisible]);
+  useEffect(() => { if (settingsLoaded.current) window.localStorage.setItem(STORAGE_KEYS.poisOpen, String(poisOpen)); }, [poisOpen]);
+  useEffect(() => {
+    settingsLoaded.current = true;
+    const ls = (k: string) => window.localStorage.getItem(k);
+    const pv = ls(STORAGE_KEYS.poisVisible);     if (pv !== null) setPoisVisible(pv === "true");
+    const av = ls(STORAGE_KEYS.alertsVisible);   if (av !== null) setAlertsVisible(av === "true");
+    const fv = ls(STORAGE_KEYS.forecastVisible); if (fv !== null) setForecastVisible(fv === "true");
+    const po = ls(STORAGE_KEYS.poisOpen);        if (po !== null) setPoisOpen(po === "true");
+  }, []);
 
   const routePoints = useMemo<LatLng[]>(() => {
     if (segments.length === 0) return [];
@@ -221,19 +228,6 @@ export function MapPanel({
     () => routeFilteredPois.filter((poi) => activeCategories.has(poi.category)),
     [routeFilteredPois, activeCategories],
   );
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.poisVisible, String(poisVisible));
-  }, [poisVisible]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.alertsVisible, String(alertsVisible));
-  }, [alertsVisible]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.forecastVisible, String(forecastVisible));
-  }, [forecastVisible]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.poisOpen, String(poisOpen));
-  }, [poisOpen]);
 
   const isDark = themeMode === "dark";
   const panelBase = isDark ? "border-slate-700/80 bg-slate-950/90 text-slate-200" : "border-slate-300/90 bg-white/95 text-slate-900";

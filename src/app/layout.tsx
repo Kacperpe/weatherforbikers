@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeProvider } from "next-themes";
 import { LangProvider } from "@/contexts/lang-context";
 import "./globals.css";
 
@@ -37,9 +36,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="h-full overflow-hidden flex flex-col bg-white dark:bg-slate-950 transition-colors">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-          <LangProvider>{children}</LangProvider>
-        </ThemeProvider>
+        <LangProvider>{children}</LangProvider>
       </body>
     </html>
   );
