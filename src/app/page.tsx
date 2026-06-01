@@ -244,16 +244,34 @@ export default function Home() {
     setForecastError(null);
     setForecastRows([]);
     try {
-      const results = await Promise.allSettled(
-        checkpoints.map(async (segment) => {
+      const FORECAST_CONCURRENCY = 5;
+
+      const fetchPoint = async (segment: RouteSegment): Promise<WeatherPointForecast> => {
           const plannedTime = new Date(baseDate.getTime() + segment.etaMinutesFromStart * 60_000);
           const lat = segment.to[1];
           const lon = segment.to[0];
           const query = new URLSearchParams({ lat: String(lat), lon: String(lon), time: plannedTime.toISOString() });
-          const response = await fetch(`/api/weather/point?${query.toString()}`, { cache: "no-store" });
-          const data = (await response.json()) as WeatherPointResponse;
-          if (!response.ok || !data.ok || !data.sample) {
-            throw new Error(data.error ?? `HTTP ${response.status}`);
+
+          // Retry once on rate limit (429) with a short backoff.
+          let response: Response | undefined;
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            response = await fetch(`/api/weather/point?${query.toString()}`, { cache: "no-store" });
+            if (response.status !== 429) break;
+            if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+          }
+          if (!response) throw new Error("Brak odpowiedzi serwera prognozy.");
+
+          // Read as text first: a rate-limited/edge response may be plain text
+          // ("Too Many Requests"), not JSON — parsing it directly would throw.
+          const raw = await response.text();
+          let data: WeatherPointResponse | null = null;
+          try { data = JSON.parse(raw) as WeatherPointResponse; } catch { /* handled below */ }
+
+          if (!response.ok || !data || !data.ok || !data.sample) {
+            if (response.status === 429) {
+              throw new Error("Zbyt wiele zapytań do API pogody — spróbuj ponownie za chwilę.");
+            }
+            throw new Error(data?.error ?? `HTTP ${response.status}`);
           }
           const timezone = data.timezone ?? "UTC";
           const plannedAtRouteTz = new Intl.DateTimeFormat("pl-PL", {
@@ -278,8 +296,14 @@ export default function Home() {
             windGustsKmh: data.sample.windGustsKmh,
             weatherCode: data.sample.weatherCode,
           } satisfies WeatherPointForecast;
-        }),
-      );
+      };
+
+      // Throttle: fire in small batches so long routes don't trip a 429.
+      const results: PromiseSettledResult<WeatherPointForecast>[] = [];
+      for (let i = 0; i < checkpoints.length; i += FORECAST_CONCURRENCY) {
+        const batch = checkpoints.slice(i, i + FORECAST_CONCURRENCY);
+        results.push(...(await Promise.allSettled(batch.map(fetchPoint))));
+      }
 
       const rows = results.flatMap((r) => r.status === "fulfilled" ? [r.value] : []);
       const failures = results.filter((r) => r.status === "rejected");
