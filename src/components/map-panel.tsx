@@ -48,6 +48,7 @@ const STORAGE_KEYS = {
 
 const TILE_DEG = 0.6;
 const MAX_POI_TILES = 25;
+const POI_CONCURRENCY = 3;
 
 function SectionHeader({
   label,
@@ -217,31 +218,45 @@ export function MapPanel({
     };
 
     timer = setTimeout(() => {
+      if (cancelled) return;
       setPois([]);
       setPoisLoading(true);
       setPoiProgress({ loaded: 0, total: poisTiles.length });
       const seen = new Set<number>();
       let loadedCount = 0;
-      for (const promise of poisTiles.map(fetchTile)) {
-        void promise.then((tilePois) => {
+
+      const run = async () => {
+        for (let i = 0; i < poisTiles.length; i += POI_CONCURRENCY) {
           if (cancelled) return;
-          loadedCount++;
-          setPoiProgress({ loaded: loadedCount, total: poisTiles.length });
-          if (tilePois.length > 0) {
-            setPois((prev) => {
-              const next = [...prev];
-              for (const poi of tilePois) {
-                if (!seen.has(poi.id)) { seen.add(poi.id); next.push(poi); }
+          const batch = poisTiles.slice(i, i + POI_CONCURRENCY);
+          await Promise.allSettled(
+            batch.map(async (tile) => {
+              let tilePois = await fetchTile(tile);
+              if (tilePois.length === 0 && !cancelled) {
+                await new Promise<void>((r) => setTimeout(r, 2000));
+                tilePois = await fetchTile(tile);
               }
-              return next;
-            });
-          }
-          if (loadedCount === poisTiles.length) {
-            setPoisLoading(false);
-            setPoiProgress(null);
-          }
-        });
-      }
+              if (cancelled) return;
+              loadedCount++;
+              setPoiProgress({ loaded: loadedCount, total: poisTiles.length });
+              if (tilePois.length > 0) {
+                setPois((prev) => {
+                  const next = [...prev];
+                  for (const poi of tilePois) {
+                    if (!seen.has(poi.id)) { seen.add(poi.id); next.push(poi); }
+                  }
+                  return next;
+                });
+              }
+            })
+          );
+        }
+        if (!cancelled) {
+          setPoisLoading(false);
+          setPoiProgress(null);
+        }
+      };
+      void run();
     }, 600);
 
     return () => {
