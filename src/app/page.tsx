@@ -12,7 +12,7 @@ import type { WeatherAlert, WeatherAlertKind } from "@/types/weather-alert";
 
 const DEMO_ROUTES: { label: string; file: string }[] = [];
 
-type ThemeMode = "dark" | "light";
+type ThemeMode = "dark" | "light" | "system";
 const FORECAST_WINDOW_MS = 16 * 24 * 60 * 60 * 1000;
 const FORECAST_BUFFER_MS = 60 * 60 * 1000;
 const COMING_SOON_BY_LANG: Record<string, string> = {
@@ -171,6 +171,7 @@ export default function Home() {
   const [forecastRows, setForecastRows] = useState<WeatherPointForecast[]>([]);
   const [notifyEmail, setNotifyEmail] = useState("");
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+  const [systemDark, setSystemDark] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const maxForecastDate = useMemo(
     () => nowMs > 0 ? toDateTimeLocalInputValue(new Date(nowMs + FORECAST_WINDOW_MS - FORECAST_BUFFER_MS)) : "",
@@ -189,8 +190,12 @@ export default function Home() {
     const now = Date.now();
     setNowMs(now);
     setRouteStartAt(toDateTimeLocalInputValue(new Date(now)));
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    setSystemDark(mq.matches);
     const savedTheme = window.localStorage.getItem("theme-mode");
-    setThemeMode(savedTheme === "light" ? "light" : "dark");
+    setThemeMode(savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system");
+    const mqHandler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', mqHandler);
 
     const ls = (key: string) => window.localStorage.getItem(key);
     const tu = ls("settings:tempUnit");
@@ -203,17 +208,18 @@ export default function Home() {
     if ([250, 500, 1000, 2000].includes(pr)) setPoiRadius(pr);
 
     const timer = setInterval(() => setNowMs(Date.now()), 60_000);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); mq.removeEventListener('change', mqHandler); };
   }, []);
   useEffect(() => {
     const root = document.documentElement;
-    if (themeMode === "dark") root.classList.add("dark");
+    const dark = themeMode === "dark" || (themeMode === "system" && systemDark);
+    if (dark) root.classList.add("dark");
     else root.classList.remove("dark");
-  }, [themeMode]);
+  }, [themeMode, systemDark]);
   const [activeTab, setActiveTab] = useState<AppTab>("map");
 
   const weatherAlerts = useMemo(() => computeWeatherAlerts(forecastRows), [forecastRows]);
-  const isDark = themeMode === "dark";
+  const isDark = themeMode === "dark" || (themeMode === "system" && systemDark);
 
   const computeRouteForecast = useCallback(async () => {
     if (segments.length === 0) return;
@@ -315,7 +321,7 @@ export default function Home() {
 
   function toggleTheme() {
     setThemeMode((prev) => {
-      const next = prev === "dark" ? "light" : "dark";
+      const next = prev === "system" ? "dark" : prev === "dark" ? "light" : "system";
       window.localStorage.setItem("theme-mode", next);
       return next;
     });
@@ -406,7 +412,7 @@ export default function Home() {
       <div className="absolute inset-0 md:left-16">
         <MapPanel
           segments={segments}
-          themeMode={themeMode}
+          themeMode={isDark ? "dark" : "light"}
           weatherAlerts={weatherAlerts}
           poiRadius={poiRadius}
           forecastRows={forecastRows}
@@ -599,7 +605,7 @@ export default function Home() {
                   <span className="font-semibold">{t("settings.title")}</span>
                   <button type="button" onClick={toggleTheme}
                     className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${isDark ? "border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
-                    {isDark ? `☀️ ${t("settings.theme.light")}` : `🌙 ${t("settings.theme.dark")}`}
+                    {themeMode === "dark" ? t("settings.theme.light") : themeMode === "light" ? t("settings.theme.system") : t("settings.theme.dark")}
                   </button>
                 </div>
 
