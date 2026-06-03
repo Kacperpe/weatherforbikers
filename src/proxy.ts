@@ -9,7 +9,7 @@ const ipMap = new Map<string, RateRecord>();
 const MAP_MAX = 5000;
 
 const RATE_DEFAULT: RateConfig = { limit: 60, windowMs: 60_000 };
-const RATE_POIS: RateConfig = { limit: 10, windowMs: 60_000 };
+const RATE_POIS: RateConfig = { limit: 120, windowMs: 60_000 };
 const RATE_WEATHER: RateConfig = { limit: 30, windowMs: 60_000 };
 const RATE_HOURLY: RateConfig = { limit: 500, windowMs: 60 * 60 * 1000 };
 
@@ -73,6 +73,8 @@ async function checkDistributedLimit(pathname: string, ip: string, cfg: RateConf
 }
 
 export async function proxy(request: NextRequest) {
+  if (process.env.NODE_ENV !== "production") return NextResponse.next();
+
   const ip = getClientIp(request);
   const pathname = request.nextUrl.pathname;
   const cfg = rateForPath(pathname);
