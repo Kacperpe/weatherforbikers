@@ -43,6 +43,7 @@ type WeatherPointResponse = {
     rainMm: number | null;
     windKmh: number | null;
     windGustsKmh: number | null;
+    windDirectionDeg: number | null;
     weatherCode: number | null;
   };
 };
@@ -102,6 +103,13 @@ function rowBackground(code: number | null, prob: number | null, windKmh: number
 }
 
 type ConfBadge = { pct: string; labelKey: string; color: string };
+const COMPASS_8 = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+
+function degToCompass(deg: number | null): string {
+  if (deg === null) return "";
+  return COMPASS_8[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
 function confidenceBadge(prob: number | null): ConfBadge {
   if (prob === null) return { pct: "—",        labelKey: "",               color: "inherit" };
   if (prob < 33)     return { pct: `${prob}%`, labelKey: "conf.possible",  color: "#f59e0b" };
@@ -294,6 +302,7 @@ export default function Home() {
             rainMm: data.sample.rainMm,
             windKmh: data.sample.windKmh,
             windGustsKmh: data.sample.windGustsKmh,
+            windDirectionDeg: data.sample.windDirectionDeg,
             weatherCode: data.sample.weatherCode,
           } satisfies WeatherPointForecast;
       };
@@ -576,7 +585,15 @@ export default function Home() {
                                 {conf.labelKey && <span className={`ml-1 text-[10px] ${isDark ? "opacity-60" : "opacity-50"}`}>{t(conf.labelKey)}</span>}
                               </td>
                               <td className="px-2 py-1.5 tabular-nums">{row.rainMm ?? row.precipitationMm ?? "—"}</td>
-                              <td className="px-2 py-1.5 tabular-nums">{fmtWind(row.windKmh)}</td>
+                              <td className="px-2 py-1.5 tabular-nums whitespace-nowrap">
+                                {fmtWind(row.windKmh)}
+                                {row.windDirectionDeg !== null && (
+                                  <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] opacity-70">
+                                    <span style={{ display: "inline-block", transform: `rotate(${row.windDirectionDeg}deg)`, lineHeight: 1, fontWeight: 700 }}>↑</span>
+                                    <span>{degToCompass(row.windDirectionDeg)}</span>
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-2 py-1.5 tabular-nums">{fmtWind(row.windGustsKmh)}</td>
                             </tr>
                           );
@@ -713,6 +730,24 @@ export default function Home() {
                     {!forecastLoading && forecastRows.length > 0 && <span> · {t("settings.forecastReady")}</span>}
                   </div>
                 )}
+
+                <section className={`rounded-lg border p-3 text-xs ${isDark ? "border-slate-700 bg-slate-900/60 text-slate-300" : "border-slate-300 bg-slate-50 text-slate-700"}`}>
+                  <div className={`mb-2 ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    <div className="font-semibold">{t("settings.api.title")}</div>
+                    <p className={`mt-1 leading-5 ${isDark ? "text-slate-400" : "text-slate-600"}`}>{t("settings.api.subtitle")}</p>
+                  </div>
+
+                  <div className="space-y-3 leading-5">
+                    <div>
+                      <div className={`font-medium ${isDark ? "text-slate-200" : "text-slate-800"}`}>{t("settings.api.weather.title")}</div>
+                      <p>{t("settings.api.weather.body")}</p>
+                    </div>
+                    <div>
+                      <div className={`font-medium ${isDark ? "text-slate-200" : "text-slate-800"}`}>{t("settings.api.pois.title")}</div>
+                      <p>{t("settings.api.pois.body")}</p>
+                    </div>
+                  </div>
+                </section>
 
                 {/* Feedback */}
                 <a

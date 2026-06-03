@@ -14,5 +14,6 @@ export type WeatherPointForecast = {
   rainMm: number | null;
   windKmh: number | null;
   windGustsKmh: number | null;
+  windDirectionDeg: number | null;
   weatherCode: number | null;
 };

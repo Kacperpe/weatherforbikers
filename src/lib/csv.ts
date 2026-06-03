@@ -27,13 +27,12 @@ export function parseRouteCsv(raw: string, speedKmh: number): RouteSegment[] {
   const latIdx = headers.findIndex((h) => LAT_KEYS.has(h));
   const lonIdx = headers.findIndex((h) => LON_KEYS.has(h));
 
-  if (latIdx === -1 || lonIdx === -1)
+  if (latIdx === -1 || lonIdx === -1) {
     throw new Error(
       "Nie znaleziono kolumn lat/lon w CSV. Wymagane nagłówki: lat, lon (lub latitude, longitude).",
     );
+  }
 
-  // Detect European decimal format ambiguity: if sep is "," but first data row has more
-  // columns than headers, the values likely use "," as decimal separator too.
   if (sep === ",") {
     const firstDataCols = lines[1].split(",").length;
     if (firstDataCols > headers.length) {

@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
 import Link from "next/link";
-import { register } from "../actions";
+import { useActionState } from "react";
 import { useLang } from "@/contexts/lang-context";
+import { register } from "../actions";
 
 export function RegisterForm() {
   const { t, lang } = useLang();

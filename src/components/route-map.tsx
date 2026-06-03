@@ -49,6 +49,21 @@ const ATTR_LIGHT = '&copy; <a href="https://www.openstreetmap.org/copyright">Ope
 
 const FORECAST_ZOOM_THRESHOLD = 10;
 
+const COMPASS_8 = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+
+function degToCompass(deg: number | null): string {
+  if (deg === null) return "";
+  return COMPASS_8[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+function windArrowHtml(deg: number | null, large = false): string {
+  if (deg === null) return "";
+  const label = degToCompass(deg);
+  const arrowPx = large ? "17px" : "10px";
+  const labelPx = large ? "12px" : "10px";
+  return `<span style="display:inline-flex;align-items:center;gap:2px;opacity:0.85"><span style="display:inline-block;transform:rotate(${deg}deg);line-height:1;font-weight:900;font-size:${arrowPx}">↑</span><span style="font-size:${labelPx};font-weight:700">${label}</span></span>`;
+}
+
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -218,7 +233,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
         border:2px solid ${color};
         border-radius:20px;
         padding:3px 9px;
-        font-size:13px;
+        font-size:15px;
         font-family:system-ui,sans-serif;
         white-space:nowrap;
         box-shadow:0 2px 10px rgba(0,0,0,0.55);
@@ -228,7 +243,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
         cursor:pointer;
         pointer-events:auto;
         transform:translate(-50%,-50%);
-      ">${emojis}<span style="font-size:11px;font-weight:700;color:${color}">${metric}</span></div>`;
+      ">${emojis}<span style="font-size:13px;font-weight:700;color:${color}">${metric}</span></div>`;
 
       const kindRows = alert.kinds.map((k) => {
         const cfg = KIND_CONFIG[k];
@@ -237,7 +252,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
         if (k === "wind") detail = fmtWind(alert.windKmh ?? null);
         if (k === "cold" || k === "hot") detail = fmtTemp(alert.temperatureC);
         return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <span style="background:${cfg.color}28;color:${cfg.color};border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;border:1px solid ${cfg.color}55;white-space:nowrap">${cfg.emoji} ${esc(t(`alert.${k}`))}</span>
+          <span style="background:${cfg.color}28;color:${cfg.color};border-radius:4px;padding:1px 6px;font-size:12px;font-weight:700;border:1px solid ${cfg.color}55;white-space:nowrap">${cfg.emoji} ${esc(t(`alert.${k}`))}</span>
           <span style="color:#374151;font-weight:600">${detail}</span>
         </div>`;
       }).join("");
@@ -246,11 +261,11 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
       const etaMin = alert.etaMinutes % 60;
       const etaLabel = etaH > 0 ? `+${etaH}h ${etaMin}min` : `+${etaMin}min`;
 
-      const popup = `<div style="min-width:190px;font-family:system-ui,sans-serif;font-size:12px;line-height:1.6">
-        <div style="font-weight:700;font-size:14px;margin-bottom:2px">${emojis} ${esc(alert.plannedAtRouteTz)}</div>
-        <div style="color:#94a3b8;font-size:11px;margin-bottom:10px">${etaLabel}</div>
+      const popup = `<div style="min-width:190px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.6">
+        <div style="font-weight:700;font-size:15px;margin-bottom:2px">${emojis} ${esc(alert.plannedAtRouteTz)}</div>
+        <div style="color:#94a3b8;font-size:12px;margin-bottom:10px">${etaLabel}</div>
         ${kindRows}
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #e2e8f0;color:#64748b;font-size:11px;display:flex;gap:12px">
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;display:flex;gap:12px">
           <span>🌡 ${fmtTemp(alert.temperatureC)}</span>
           <span>💨 ${fmtWind(alert.windKmh)}</span>
         </div>
@@ -332,7 +347,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
 
       const icon = weatherIcon(row.weatherCode);
       const temp = fmtTemp(row.temperatureC);
-      const wind = fmtWind(row.windKmh);
+      const wind = `${fmtWind(row.windKmh)}${row.windDirectionDeg !== null ? `&nbsp;${windArrowHtml(row.windDirectionDeg, true)}` : ""}`;
       const rain = row.precipitationProbability !== null ? `${row.precipitationProbability}%` : "—";
 
       const chipHtml = `<div style="
@@ -340,7 +355,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
         border:1px solid ${border};
         border-radius:8px;
         padding:3px 8px;
-        font-size:11px;
+        font-size:13px;
         font-family:system-ui,sans-serif;
         color:${color};
         white-space:nowrap;
@@ -364,11 +379,11 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
       const etaMin = row.etaMinutes % 60;
       const etaLabel = etaH > 0 ? `+${etaH}h ${etaMin}min` : `+${etaMin}min`;
 
-      const popup = `<div style="min-width:170px;font-family:system-ui,sans-serif;font-size:12px;line-height:1.7">
-        <div style="font-weight:700;font-size:13px;margin-bottom:2px">${icon} ${esc(row.plannedAtRouteTz)}</div>
-        <div style="color:#94a3b8;font-size:11px;margin-bottom:8px">${etaLabel} · ${Math.round(row.distanceKmFromStart)} km</div>
-        <div>🌡 ${fmtTemp(row.temperatureC)} <span style="color:#94a3b8;font-size:11px">(odcz. ${fmtTemp(row.apparentTemperatureC)})</span></div>
-        <div>💨 ${fmtWind(row.windKmh)} <span style="color:#94a3b8;font-size:11px">(porywy ${fmtWind(row.windGustsKmh)})</span></div>
+      const popup = `<div style="min-width:170px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.7">
+        <div style="font-weight:700;font-size:14px;margin-bottom:2px">${icon} ${esc(row.plannedAtRouteTz)}</div>
+        <div style="color:#94a3b8;font-size:12px;margin-bottom:8px">${etaLabel} · ${Math.round(row.distanceKmFromStart)} km</div>
+        <div>🌡 ${fmtTemp(row.temperatureC)} <span style="color:#94a3b8;font-size:12px">(odcz. ${fmtTemp(row.apparentTemperatureC)})</span></div>
+        <div>💨 ${fmtWind(row.windKmh)}${row.windDirectionDeg !== null ? ` ${windArrowHtml(row.windDirectionDeg)}` : ""} <span style="color:#94a3b8;font-size:12px">(porywy ${fmtWind(row.windGustsKmh)})</span></div>
         <div>🌧 ${row.precipitationProbability ?? 0}% · ${row.rainMm ?? row.precipitationMm ?? 0} mm</div>
       </div>`;
 
