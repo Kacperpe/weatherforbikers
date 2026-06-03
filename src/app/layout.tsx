@@ -36,8 +36,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full overflow-hidden antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        {/* Runs before React — applies dark class from localStorage to prevent FOUC */}
+      <body className="h-full overflow-hidden flex flex-col bg-white dark:bg-slate-950 transition-colors">
+        <LangProvider>{children}</LangProvider>
+        {/* Runs before React hydration and applies dark class from localStorage to prevent FOUC. */}
         <Script id="theme-init" strategy="beforeInteractive">{`
           try {
             if (localStorage.getItem('theme-mode') !== 'light') {
@@ -45,9 +46,6 @@ export default function RootLayout({
             }
           } catch(e) {}
         `}</Script>
-      </head>
-      <body className="h-full overflow-hidden flex flex-col bg-white dark:bg-slate-950 transition-colors">
-        <LangProvider>{children}</LangProvider>
       </body>
     </html>
   );

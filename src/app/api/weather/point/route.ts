@@ -9,6 +9,7 @@ type HourlyWeather = {
   rain?: number[];
   wind_speed_10m?: number[];
   wind_gusts_10m?: number[];
+  wind_direction_10m?: number[];
   weather_code?: number[];
 };
 
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    "&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,rain,wind_speed_10m,wind_gusts_10m,weather_code" +
+    "&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,rain,wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code" +
     `&start_date=${startDate}&end_date=${endDate}&timezone=auto&models=best_match`;
 
   try {
@@ -117,6 +118,7 @@ export async function GET(request: NextRequest) {
         rainMm: hourly.rain?.[bestIndex] ?? null,
         windKmh: hourly.wind_speed_10m?.[bestIndex] ?? null,
         windGustsKmh: hourly.wind_gusts_10m?.[bestIndex] ?? null,
+        windDirectionDeg: hourly.wind_direction_10m?.[bestIndex] ?? null,
         weatherCode: hourly.weather_code?.[bestIndex] ?? null,
       },
     });

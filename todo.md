@@ -19,6 +19,7 @@
 
 ## Srednie / Edge case
 
+- [x] Dodac strzalke kierunku wiatru w panelu `Pogoda co 30 min`: przy kazdym punkcie prognozy pokazac, z ktorej strony wieje wiatr; dokladnosc ograniczyc do 8 kierunkow (N, NE, E, SE, S, SW, W, NW).
 - [x] Clamp predkosci 1-200 km/h.
 - [x] Lepszy opis alertow na mapie.
 - [x] Eksport kalendarza przy czesciowej prognozie - odblokowany warunkowo.
@@ -103,6 +104,16 @@
   Fix: usuniety.
 
 ---
+
+## Pomysly na nowe funkcje
+
+- [ ] **Interaktywny suwak czasu wyjazdu ("Time-scrub bar")**
+  Dolny pasek poziomy z suwakiem pozwalajacym na plynne przesuwanie godziny wyruszenia w zakresie np. ±12 h od aktualnie ustawionego czasu startu (lub caly dzien co 30 min).
+  Po przesunieciu suwaka aplikacja nie pobiera nowych danych z API — zamiast tego:
+  - punkty prognozy juz pobrane (forecastRows) sa ponownie przeliczane lokalnie: kazdemu punktowi trasy przypisywana jest nowa godzina dotarcia (ETA) wynikajaca z nowej godziny startu,
+  - na mapie chipy pogodowe przesuwaja sie do godzinowego slota z juz zbuforowanych danych Open-Meteo (prognoza na ±6 h od planowanej godziny jest i tak pobrana w ramach jednego zapytania),
+  - tabela "Pogoda co 30 min" aktualizuje sie na zywo — uzytkownik widzi czy warunki sa lepsze rano czy po poludniu, gdzie pojawi sie deszcz lub silny wiatr przy innym czasie startu.
+  Suwak powinien dzialac bez dodatkowych requestow sieciowych — oparty wylacznie na juz pobranym zbiorze danych (cache lokalny w stanie React). Jezeli nowa godzina startu wybiega poza okno juz pobranych danych, suwak moze pokazac ostrzezenie i opcjonalnie odswiezyc prognoza przyciskiem. UI: cienki pasek z etykieta "Start: HH:MM" nad suwakiem, dochniety do dolnej krawedzi panelu pogody lub jako plywajacy pasek na mapie (ponizej chipsow).
 
 ## Dodatkowe wykonane kroki
 

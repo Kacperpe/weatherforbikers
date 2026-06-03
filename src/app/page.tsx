@@ -43,6 +43,7 @@ type WeatherPointResponse = {
     rainMm: number | null;
     windKmh: number | null;
     windGustsKmh: number | null;
+    windDirectionDeg: number | null;
     weatherCode: number | null;
   };
 };
@@ -75,6 +76,12 @@ function getConditionMeta(code: number | null): ConditionMeta {
   if (code <= 94)    return { icon: "⛈", labelKey: "cond.hailStorm",      rgb: [239,  68,  68] };
   if (code >= 95)    return { icon: "⛈", labelKey: "cond.storm",          rgb: [239,  68,  68] };
   return             { icon: "⛅", labelKey: "cond.variable",        rgb: [0,   0,   0  ] };
+}
+
+const COMPASS_8 = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+function degToCompass(deg: number | null): string {
+  if (deg === null) return "";
+  return COMPASS_8[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 }
 
 // 0 = brak danych, 1 = możliwe (<33%), 2 = prawdopodobne (33-67%), 3 = pewne (>67%)
@@ -294,6 +301,7 @@ export default function Home() {
             rainMm: data.sample.rainMm,
             windKmh: data.sample.windKmh,
             windGustsKmh: data.sample.windGustsKmh,
+            windDirectionDeg: data.sample.windDirectionDeg,
             weatherCode: data.sample.weatherCode,
           } satisfies WeatherPointForecast;
       };
@@ -576,7 +584,15 @@ export default function Home() {
                                 {conf.labelKey && <span className={`ml-1 text-[10px] ${isDark ? "opacity-60" : "opacity-50"}`}>{t(conf.labelKey)}</span>}
                               </td>
                               <td className="px-2 py-1.5 tabular-nums">{row.rainMm ?? row.precipitationMm ?? "—"}</td>
-                              <td className="px-2 py-1.5 tabular-nums">{fmtWind(row.windKmh)}</td>
+                              <td className="px-2 py-1.5 tabular-nums whitespace-nowrap">
+                                {fmtWind(row.windKmh)}
+                                {row.windDirectionDeg !== null && (
+                                  <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] opacity-70">
+                                    <span style={{ display: "inline-block", transform: `rotate(${row.windDirectionDeg}deg)`, lineHeight: 1, fontWeight: 700 }}>↑</span>
+                                    <span>{degToCompass(row.windDirectionDeg)}</span>
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-2 py-1.5 tabular-nums">{fmtWind(row.windGustsKmh)}</td>
                             </tr>
                           );

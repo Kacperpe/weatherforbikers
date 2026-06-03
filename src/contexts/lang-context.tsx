@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useMemo } from "react";
+import { createContext, useContext, useMemo, useSyncExternalStore } from "react";
 import { makeT, LANGS, type Lang } from "@/lib/i18n/translations";
 
 type LangContextType = {
@@ -10,6 +10,7 @@ type LangContextType = {
 };
 
 const LangContext = createContext<LangContextType | null>(null);
+const LANG_CHANGE_EVENT = "app-lang-change";
 
 function detectDeviceLang(): Lang {
   const candidates = navigator.languages?.length ? navigator.languages : [navigator.language];
@@ -20,17 +21,31 @@ function detectDeviceLang(): Lang {
   return "pl";
 }
 
+function getClientLang(): Lang {
+  const saved = window.localStorage.getItem("lang") as Lang | null;
+  if (saved && LANGS.includes(saved)) return saved;
+  return detectDeviceLang();
+}
+
+function getServerLang(): Lang {
+  return "pl";
+}
+
+function subscribeToLangChange(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(LANG_CHANGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(LANG_CHANGE_EVENT, onStoreChange);
+  };
+}
+
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(() => {
-    if (typeof window === "undefined") return "pl";
-    const saved = window.localStorage.getItem("lang") as Lang | null;
-    if (saved && LANGS.includes(saved)) return saved;
-    return detectDeviceLang();
-  });
+  const lang = useSyncExternalStore(subscribeToLangChange, getClientLang, getServerLang);
 
   function setLang(l: Lang) {
-    setLangState(l);
-    localStorage.setItem("lang", l);
+    window.localStorage.setItem("lang", l);
+    window.dispatchEvent(new Event(LANG_CHANGE_EVENT));
   }
 
   const t = useMemo(() => makeT(lang), [lang]);

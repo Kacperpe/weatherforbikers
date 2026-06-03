@@ -73,6 +73,8 @@ async function checkDistributedLimit(pathname: string, ip: string, cfg: RateConf
 }
 
 export async function proxy(request: NextRequest) {
+  if (process.env.NODE_ENV !== "production") return NextResponse.next();
+
   const ip = getClientIp(request);
   const pathname = request.nextUrl.pathname;
   const cfg = rateForPath(pathname);
