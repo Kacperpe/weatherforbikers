@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { LangProvider } from "@/contexts/lang-context";
 import "./globals.css";
 
@@ -48,6 +49,7 @@ export default function RootLayout({
       </head>
       <body className="h-full overflow-hidden flex flex-col bg-white dark:bg-slate-950 transition-colors">
         <LangProvider>{children}</LangProvider>
+        <Analytics />
       </body>
     </html>
   );

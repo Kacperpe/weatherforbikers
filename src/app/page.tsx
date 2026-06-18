@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { track } from "@vercel/analytics";
 import { MapPanel } from "@/components/map-panel";
 import { AppNav, type AppTab } from "@/components/app-nav";
 import { parseRouteFile } from "@/lib/parse-route";
+import { saveLastRoute, getLastRouteName, restoreLastRouteFile } from "@/lib/last-route";
 import { useLang } from "@/contexts/lang-context";
 import { LANG_LABELS, LANGS } from "@/lib/i18n/translations";
 import type { RouteSegment } from "@/types/route-segment";
@@ -167,6 +169,7 @@ export default function Home() {
   const { t, lang, setLang } = useLang();
   const [segments, setSegments] = useState<RouteSegment[]>([]);
   const [lastFile, setLastFile] = useState<File | null>(null);
+  const [lastRouteName, setLastRouteName] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [averageSpeedKmh, setAverageSpeedKmh] = useState(20);
   const [poiRadius, setPoiRadius] = useState(500);
@@ -362,6 +365,8 @@ export default function Home() {
       setRouteError(null);
       setForecastRows([]);
       setForecastError(null);
+      void saveLastRoute(file);
+      setLastRouteName(file.name);
     } catch (err) {
       setSegments([]);
       setLastFile(null);
@@ -372,10 +377,13 @@ export default function Home() {
   }
 
   async function handleRouteUpload(file: File) {
+    const ext = file.name.toLowerCase().split(".").pop() ?? "unknown";
+    track("route_uploaded", { format: ext });
     await parseAndSetRoute(file, averageSpeedKmh);
   }
 
   async function loadPublicRoute(filename: string) {
+    track("demo_route_loaded", { file: filename });
     try {
       const response = await fetch(`/${filename}`);
       if (!response.ok) throw new Error("Brak pliku");
@@ -388,6 +396,22 @@ export default function Home() {
       setRouteError(err instanceof Error ? err.message : `Nie udało się wczytać: ${filename}`);
     }
   }
+
+  // Wczytaj ostatnią trasę zapisaną w przeglądarce (po powrocie na stronę).
+  async function loadLastRoute() {
+    track("last_route_loaded");
+    const file = await restoreLastRouteFile();
+    if (!file) {
+      setLastRouteName(null);
+      return;
+    }
+    await parseAndSetRoute(file, averageSpeedKmh);
+  }
+
+  // Po wejściu na stronę sprawdź, czy jest zapisana ostatnia trasa.
+  useEffect(() => {
+    setLastRouteName(getLastRouteName());
+  }, []);
 
   // Re-parsuj trasę przy zmianie prędkości — debounce 800ms żeby nie strzelać requestami przy suwaku
   useEffect(() => {
@@ -637,7 +661,7 @@ export default function Home() {
                   {t("settings.language")}
                   <select
                     value={lang}
-                    onChange={(e) => setLang(e.target.value as typeof lang)}
+                    onChange={(e) => { const v = e.target.value as typeof lang; track("language_changed", { lang: v }); setLang(v); }}
                     className={inputCls}
                   >
                     {LANGS.map((l) => (
@@ -713,6 +737,13 @@ export default function Home() {
                   )}
                 </label>
 
+                {lastRouteName && segments.length === 0 && (
+                  <button type="button" onClick={() => void loadLastRoute()}
+                    className={`w-full rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${isDark ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20" : "border-emerald-400 bg-emerald-100 text-emerald-800 hover:bg-emerald-200"}`}>
+                    {t("settings.loadLastRoute", { name: lastRouteName })}
+                  </button>
+                )}
+
                 {DEMO_ROUTES.map((route) => (
                   <button key={route.file} type="button" onClick={() => void loadPublicRoute(route.file)}
                     className={`w-full rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${isDark ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20" : "border-slate-400 bg-slate-200 text-slate-800 hover:bg-slate-300"}`}>
@@ -782,7 +813,7 @@ export default function Home() {
         </div>
       )}
 
-      <AppNav activeTab={activeTab} onTabChange={setActiveTab} isDark={isDark} alertCount={weatherAlerts.length} />
+      <AppNav activeTab={activeTab} onTabChange={(tab) => { track("tab_switched", { tab }); setActiveTab(tab); }} isDark={isDark} alertCount={weatherAlerts.length} />
     </div>
   );
 }
