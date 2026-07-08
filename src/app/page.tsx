@@ -171,6 +171,8 @@ export default function Home() {
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [lastRouteName, setLastRouteName] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
+  const [googleUrl, setGoogleUrl] = useState("");
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [averageSpeedKmh, setAverageSpeedKmh] = useState(20);
   const [poiRadius, setPoiRadius] = useState(500);
   const [tempUnit, setTempUnit] = useState<"°C" | "°F">("°C");
@@ -373,6 +375,32 @@ export default function Home() {
       setRouteError(err instanceof Error ? err.message : "Nie udało się odczytać trasy.");
     } finally {
       setFileLoading(false);
+    }
+  }
+
+  // Importuje trasę z linku Google Maps: serwer rozwija link, wyciąga punkty
+  // i przepuszcza je przez BRouter, zwracając GeoJSON. Owijamy go w plik, żeby
+  // reszta przepływu (prognoza, POI, zapis ostatniej trasy) działała bez zmian.
+  async function handleGoogleImport() {
+    const url = googleUrl.trim();
+    if (!url || googleLoading) return;
+    track("google_route_import");
+    setGoogleLoading(true);
+    setRouteError(null);
+    try {
+      const res = await fetch(`/api/import-route?url=${encodeURIComponent(url)}`);
+      const data = (await res.json()) as { ok: boolean; geojson?: string; error?: string; approximate?: boolean };
+      if (!data.ok || !data.geojson) {
+        throw new Error(data.error ?? "Nie udało się zaimportować trasy z Google Maps.");
+      }
+      const file = new File([data.geojson], "trasa-google-maps.geojson", { type: "application/geo+json" });
+      await parseAndSetRoute(file, averageSpeedKmh);
+      setGoogleUrl("");
+      if (data.approximate) setRouteError(t("settings.googleImport.approximate"));
+    } catch (err) {
+      setRouteError(err instanceof Error ? err.message : "Nie udało się zaimportować trasy z Google Maps.");
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -736,6 +764,33 @@ export default function Home() {
                     <p className="mt-2 text-xs opacity-60 animate-pulse">{t("settings.fileLoading")}</p>
                   )}
                 </label>
+
+                {/* Import z linku Google Maps */}
+                <div className={`block rounded-lg border p-3 text-sm ${isDark ? "border-slate-700 bg-slate-900/60 text-slate-300" : "border-slate-300 bg-slate-50 text-slate-700"}`}>
+                  <span className={`mb-2 block font-medium ${isDark ? "text-slate-200" : "text-slate-800"}`}>
+                    {t("settings.googleImport.label")}
+                  </span>
+                  <input
+                    type="url"
+                    inputMode="url"
+                    value={googleUrl}
+                    placeholder="https://maps.app.goo.gl/..."
+                    onChange={(e) => setGoogleUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleGoogleImport(); } }}
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleGoogleImport()}
+                    disabled={googleLoading || !googleUrl.trim()}
+                    className={`mt-2 w-full rounded-md border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-40 ${isDark ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20" : "border-cyan-400 bg-cyan-100 text-cyan-800 hover:bg-cyan-200"}`}
+                  >
+                    {googleLoading ? t("settings.googleImport.loading") : t("settings.googleImport.button")}
+                  </button>
+                  <p className={`mt-2 text-[11px] leading-4 ${isDark ? "text-slate-500" : "text-slate-500"}`}>
+                    {t("settings.googleImport.hint")}
+                  </p>
+                </div>
 
                 {lastRouteName && segments.length === 0 && (
                   <button type="button" onClick={() => void loadLastRoute()}
