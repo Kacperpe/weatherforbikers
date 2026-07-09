@@ -8,6 +8,7 @@ type Props = {
   segments: RouteSegment[];
   alerts: WeatherAlert[];
   isDark: boolean;
+  onLocationChange: (location: [number, number] | null) => void;
 };
 
 type RidePosition = {
@@ -58,7 +59,7 @@ async function showRideNotification(title: string, body: string, tag: string) {
   }
 }
 
-export function RideMode({ segments, alerts, isDark }: Props) {
+export function RideMode({ segments, alerts, isDark, onLocationChange }: Props) {
   const [active, setActive] = useState(false);
   const [position, setPosition] = useState<RidePosition | null>(null);
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(() => {
@@ -76,6 +77,7 @@ export function RideMode({ segments, alerts, isDark }: Props) {
         setLocationError(null);
         const progress = findRouteProgress(nextPosition, segments);
         setPosition(progress);
+        onLocationChange([progress.lat, progress.lon]);
 
         for (const alert of alerts) {
           const minutesAway = alert.etaMinutes - progress.etaMinutes;
@@ -95,7 +97,7 @@ export function RideMode({ segments, alerts, isDark }: Props) {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [active, alerts, segments]);
+  }, [active, alerts, onLocationChange, segments]);
 
   const nextAlert = useMemo(() => {
     if (!position) return null;
@@ -119,6 +121,7 @@ export function RideMode({ segments, alerts, isDark }: Props) {
   function stopRide() {
     setActive(false);
     setPosition(null);
+    onLocationChange(null);
     notifiedAlerts.current.clear();
   }
 

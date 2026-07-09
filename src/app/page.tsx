@@ -185,6 +185,7 @@ export default function Home() {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [forecastRows, setForecastRows] = useState<WeatherPointForecast[]>([]);
+  const [rideLocation, setRideLocation] = useState<[number, number] | null>(null);
   const [activeAlertKinds, setActiveAlertKinds] = useState<Set<WeatherAlertKind>>(new Set());
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
@@ -531,8 +532,9 @@ export default function Home() {
           forecastRows={forecastRows}
           tempUnit={tempUnit}
           windUnit={windUnit}
+          currentLocation={rideLocation}
         />
-        <RideMode segments={segments} alerts={filteredWeatherAlerts} isDark={isDark} />
+        <RideMode segments={segments} alerts={filteredWeatherAlerts} isDark={isDark} onLocationChange={setRideLocation} />
         {segments.length === 0 && (
           <div className="pointer-events-none absolute inset-x-0 top-1/2 z-[1050] flex -translate-y-1/2 justify-center px-4">
             <section className={`pointer-events-auto w-full max-w-md rounded-2xl border p-5 shadow-2xl backdrop-blur ${isDark ? "border-slate-700 bg-slate-950/95 text-slate-100" : "border-slate-300 bg-white/95 text-slate-900"}`}>

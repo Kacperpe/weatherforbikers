@@ -25,6 +25,7 @@ type MapPanelProps = {
   forecastRows: WeatherPointForecast[];
   tempUnit: "°C" | "°F";
   windUnit: "km/h" | "m/s" | "mph" | "kn";
+  currentLocation: [number, number] | null;
 };
 
 type SectionHeaderProps = {
@@ -133,6 +134,7 @@ export function MapPanel({
   forecastRows,
   tempUnit,
   windUnit,
+  currentLocation,
 }: MapPanelProps) {
   const { t } = useLang();
   const [pois, setPois] = useState<Poi[]>([]);
@@ -302,6 +304,7 @@ export function MapPanel({
         forecastRows={forecastVisible ? forecastRows : []}
         tempUnit={tempUnit}
         windUnit={windUnit}
+        currentLocation={currentLocation}
       />
 
       {segments.length === 0 && (

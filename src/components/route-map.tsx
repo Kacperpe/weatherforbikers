@@ -19,6 +19,7 @@ type RouteMapProps = {
   forecastRows: WeatherPointForecast[];
   tempUnit: "°C" | "°F";
   windUnit: "km/h" | "m/s" | "mph" | "kn";
+  currentLocation: LatLng | null;
 };
 
 const KIND_CONFIG: Record<WeatherAlertKind, { color: string; emoji: string; label: string }> = {
@@ -97,7 +98,7 @@ function weatherIcon(code: number | null): string {
   return "⛅";
 }
 
-export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows, tempUnit, windUnit }: RouteMapProps) {
+export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows, tempUnit, windUnit, currentLocation }: RouteMapProps) {
   const { t } = useLang();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletType.Map | null>(null);
@@ -107,8 +108,35 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
   const alertLayerRef = useRef<LeafletType.LayerGroup | null>(null);
   const poiLayerRef = useRef<LeafletType.LayerGroup | null>(null);
   const forecastLayerRef = useRef<LeafletType.LayerGroup | null>(null);
+  const userMarkerRef = useRef<LeafletType.Marker | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(7);
+
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!mapReady || !L || !map) return;
+
+    if (!currentLocation) {
+      userMarkerRef.current?.remove();
+      userMarkerRef.current = null;
+      return;
+    }
+
+    if (!userMarkerRef.current) {
+      const icon = L.divIcon({
+        className: "",
+        html: "<div title='Twoja lokalizacja' style='width:22px;height:22px;border-radius:50%;background:#06b6d4;border:3px solid white;box-shadow:0 1px 8px rgba(0,0,0,.55);'></div>",
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      userMarkerRef.current = L.marker(currentLocation, { icon, zIndexOffset: 2000 }).addTo(map);
+    } else {
+      userMarkerRef.current.setLatLng(currentLocation);
+    }
+
+    map.panTo(currentLocation, { animate: true, duration: 0.35 });
+  }, [currentLocation, mapReady]);
 
   useEffect(() => {
     if (!containerRef.current) return;
