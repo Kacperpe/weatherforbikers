@@ -29,8 +29,8 @@ type Copy = {
 
 const common = {
   gps: "GPS",
-  owner: "[YOUR NAME / COMPANY]",
-  email: "[YOUR PRIVACY EMAIL]",
+  owner: "Kacper Pasiński",
+  email: "mypassionsiswindsurfing@duck.com",
 };
 
 const COPY: Record<Lang, Copy> = {
