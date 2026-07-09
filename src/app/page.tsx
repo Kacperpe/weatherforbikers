@@ -10,6 +10,7 @@ import { saveLastRoute, getLastRouteName, restoreLastRouteFile } from "@/lib/las
 import { generateRouteIcs } from "@/lib/ics";
 import { useLang } from "@/contexts/lang-context";
 import { LANG_LABELS, LANGS } from "@/lib/i18n/translations";
+import Link from "next/link";
 import type { RouteSegment } from "@/types/route-segment";
 import type { WeatherPointForecast } from "@/types/weather-point-forecast";
 import type { WeatherAlert, WeatherAlertKind } from "@/types/weather-alert";
@@ -955,6 +956,9 @@ export default function Home() {
 
                 {/* Footer */}
                 <div className={`pt-1 text-center text-[11px] ${isDark ? "text-slate-600" : "text-slate-400"}`}>
+                  <Link href="/privacy" className={`mr-3 transition-colors hover:underline ${isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-600 hover:text-slate-900"}`}>
+                    Polityka prywatności
+                  </Link>
                   Made by{" "}
                   <a
                     href="https://github.com/Kacperpe"
