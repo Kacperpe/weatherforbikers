@@ -1,0 +1,13 @@
+{
+  "name": "Mapa pogody dla rowerzystow",
+  "short_name": "Pogoda na trasie",
+  "description": "Alerty pogodowe na trasie rowerowej",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "lang": "pl",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }
+  ]
+}

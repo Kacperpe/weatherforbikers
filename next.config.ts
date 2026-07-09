@@ -4,7 +4,6 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   {
     key: "Content-Security-Policy",
     value: [
@@ -17,6 +16,7 @@ const securityHeaders = [
       "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
       // All API calls are same-origin (weather/POI proxied via /api/*)
       "connect-src 'self'",
+      "worker-src 'self'",
       "font-src 'self'",
       "frame-ancestors 'none'",
       "object-src 'none'",
@@ -31,7 +31,13 @@ const nextConfig: NextConfig = {
     turbopackFileSystemCacheForDev: false,
   },
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [{
+      source: "/(.*)",
+      headers: [
+        ...securityHeaders,
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
+      ],
+    }];
   },
 };
 

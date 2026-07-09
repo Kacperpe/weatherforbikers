@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { track } from "@vercel/analytics";
 import { MapPanel } from "@/components/map-panel";
+import { RideMode } from "@/components/ride-mode";
 import { AppNav, type AppTab } from "@/components/app-nav";
 import { parseRouteFile } from "@/lib/parse-route";
 import { saveLastRoute, getLastRouteName, restoreLastRouteFile } from "@/lib/last-route";
+import { generateRouteIcs } from "@/lib/ics";
 import { useLang } from "@/contexts/lang-context";
 import { LANG_LABELS, LANGS } from "@/lib/i18n/translations";
 import type { RouteSegment } from "@/types/route-segment";
@@ -17,6 +19,7 @@ const DEMO_ROUTES: { label: string; file: string }[] = [];
 type ThemeMode = "dark" | "light";
 const FORECAST_WINDOW_MS = 16 * 24 * 60 * 60 * 1000;
 const FORECAST_BUFFER_MS = 60 * 60 * 1000;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const COMING_SOON_BY_LANG: Record<string, string> = {
   pl: "Wkrótce",
   en: "Coming soon",
@@ -182,6 +185,8 @@ export default function Home() {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [forecastRows, setForecastRows] = useState<WeatherPointForecast[]>([]);
+  const [activeAlertKinds, setActiveAlertKinds] = useState<Set<WeatherAlertKind>>(new Set());
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
   const [nowMs, setNowMs] = useState(0);
   const maxForecastDate = useMemo(
@@ -225,6 +230,10 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<AppTab>("map");
 
   const weatherAlerts = useMemo(() => computeWeatherAlerts(forecastRows), [forecastRows]);
+  const filteredWeatherAlerts = useMemo(() => {
+    if (activeAlertKinds.size === 0) return weatherAlerts;
+    return weatherAlerts.filter((alert) => alert.kinds.some((kind) => activeAlertKinds.has(kind)));
+  }, [activeAlertKinds, weatherAlerts]);
   const isDark = themeMode === "dark";
 
   const computeRouteForecast = useCallback(async () => {
@@ -346,8 +355,24 @@ export default function Home() {
   }, [computeRouteForecast]);
 
   function handleCalendarClick() {
-    const message = COMING_SOON_BY_LANG[lang] ?? COMING_SOON_BY_LANG.en;
-    window.alert(message);
+    if (forecastRows.length === 0) return;
+    const ics = generateRouteIcs(forecastRows, routeStartAt);
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "prognoza-trasy.ics";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function toggleAlertKind(kind: WeatherAlertKind) {
+    setActiveAlertKinds((previous) => {
+      const next = new Set(previous);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
   }
 
   function toggleTheme() {
@@ -482,6 +507,16 @@ export default function Home() {
   const labelCls    = isDark ? "block text-sm text-slate-300" : "block text-sm text-slate-700";
   const inputCls    = `mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none ring-cyan-400/40 focus:ring ${isDark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-300 bg-white text-slate-900"}`;
   const errorCls    = `rounded-lg border px-3 py-2 text-xs ${isDark ? "border-rose-400/40 bg-rose-400/10 text-rose-200" : "border-rose-300 bg-rose-50 text-rose-700"}`;
+  const routeDistanceKm = segments.length > 0 ? segments[segments.length - 1].cumulativeDistanceKm : 0;
+  const routeDurationHours = segments.length > 0 ? segments[segments.length - 1].etaMinutesFromStart / 60 : 0;
+  const worstAlert = filteredWeatherAlerts[0];
+  const forecastStatus = forecastLoading
+    ? t("weather.loading")
+    : forecastRows.length === 0
+      ? t("weather.noRoute")
+      : filteredWeatherAlerts.length === 0
+        ? "Dobre warunki na trasie"
+        : `${filteredWeatherAlerts.length} odcinków wymaga uwagi`;
 
   return (
     <div className={`relative h-dvh w-full overflow-hidden transition-colors duration-300 ${isDark ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
@@ -491,12 +526,49 @@ export default function Home() {
         <MapPanel
           segments={segments}
           themeMode={themeMode}
-          weatherAlerts={weatherAlerts}
+          weatherAlerts={filteredWeatherAlerts}
           poiRadius={poiRadius}
           forecastRows={forecastRows}
           tempUnit={tempUnit}
           windUnit={windUnit}
         />
+        <RideMode segments={segments} alerts={filteredWeatherAlerts} isDark={isDark} />
+        {segments.length === 0 && (
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 z-[1050] flex -translate-y-1/2 justify-center px-4">
+            <section className={`pointer-events-auto w-full max-w-md rounded-2xl border p-5 shadow-2xl backdrop-blur ${isDark ? "border-slate-700 bg-slate-950/95 text-slate-100" : "border-slate-300 bg-white/95 text-slate-900"}`}>
+              <p className="text-xs font-semibold uppercase tracking-widest text-cyan-500">Mapa pogody dla rowerzystów</p>
+              <h1 className="mt-2 text-xl font-semibold">Sprawdź pogodę na całej trasie</h1>
+              <p className={`mt-2 text-sm leading-5 ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+                Wczytaj trasę, ustaw godzinę startu i zobacz, gdzie po drodze może pojawić się deszcz albo silny wiatr.
+              </p>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <button type="button" onClick={() => uploadInputRef.current?.click()} className="rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400">
+                  Wczytaj plik trasy
+                </button>
+                <button type="button" onClick={() => setActiveTab("settings")} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${isDark ? "border-slate-600 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-100"}`}>
+                  Wklej link Google Maps
+                </button>
+              </div>
+              {lastRouteName && (
+                <button type="button" onClick={() => void loadLastRoute()} className="mt-3 text-left text-xs font-semibold text-emerald-500 hover:underline">
+                  Wczytaj ostatnią trasę: {lastRouteName}
+                </button>
+              )}
+              {routeError && <p className={`mt-3 ${errorCls}`}>{routeError}</p>}
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept=".geojson,.gpx,.kml,.kmz,.tcx,.csv,application/geo+json,application/json"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleRouteUpload(file);
+                  event.target.value = "";
+                }}
+              />
+            </section>
+          </div>
+        )}
       </div>
 
       {/* Content overlay: weather & settings tabs */}
@@ -513,24 +585,53 @@ export default function Home() {
                 {forecastLoading && <span className="text-xs opacity-60">{t("weather.loading")}</span>}
               </div>
 
+              {segments.length > 0 && (
+                <section className={`mx-3 mt-3 rounded-xl border p-3 ${isDark ? "border-cyan-400/30 bg-cyan-400/10" : "border-cyan-200 bg-cyan-50"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Decyzja przed wyjazdem</p>
+                      <p className="mt-1 text-base font-semibold">{forecastStatus}</p>
+                    </div>
+                    <span className="text-right text-xs tabular-nums opacity-70">
+                      {Math.round(routeDistanceKm)} km<br />{routeDurationHours.toFixed(1)} h
+                    </span>
+                  </div>
+                  {worstAlert && (
+                    <p className="mt-2 text-xs leading-5 opacity-80">
+                      Najbliższe ryzyko: {worstAlert.plannedAtRouteTz}, około {Math.round(worstAlert.distanceKmFromStart)} km od startu.
+                    </p>
+                  )}
+                </section>
+              )}
+
               {weatherAlerts.length > 0 && (
                 <div className="shrink-0 px-4 py-2 flex flex-wrap gap-1.5">
                   {(["storm", "snow", "rain", "wind", "cold", "hot"] as WeatherAlertKind[]).map((kind) => {
                     const count = weatherAlerts.filter((a) => a.kinds.includes(kind)).length;
                     if (count === 0) return null;
                     const { emoji, color } = ALERT_KIND_CONFIG[kind];
+                    const selected = activeAlertKinds.size === 0 || activeAlertKinds.has(kind);
                     return (
-                      <span key={kind} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+                      <button key={kind} type="button" onClick={() => toggleAlertKind(kind)} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity ${selected ? "opacity-100" : "opacity-40"}`}
                         style={{ background: color + "22", color, border: `1px solid ${color}55` }}>
                         {emoji} {t(`alert.${kind}`)} {count}×
-                      </span>
+                      </button>
                     );
                   })}
                 </div>
               )}
 
               <div className="flex-1 overflow-y-auto md:flex-none md:overflow-visible">
-                {forecastError && <div className={`m-4 ${errorCls}`}>{forecastError}</div>}
+                {forecastError && (
+                  <div className={`m-4 ${errorCls}`}>
+                    <p>{forecastError}</p>
+                    {segments.length > 0 && (
+                      <button type="button" onClick={() => void computeRouteForecast()} className="mt-2 rounded border border-current px-2 py-1 font-semibold">
+                        Spróbuj ponownie
+                      </button>
+                    )}
+                  </div>
+                )}
                 {forecastRows.length === 0 && !forecastLoading && !forecastError && (
                   <div className={`m-4 rounded-lg border px-4 py-8 text-center text-sm opacity-60 ${panelBorder}`}>
                     {t("weather.noRoute")}
@@ -666,7 +767,7 @@ export default function Home() {
                   type="button"
                   onClick={handleCalendarClick}
                   className={`w-full rounded px-2 py-1.5 text-xs font-semibold transition-colors ${isDark ? "bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25" : "bg-cyan-100 text-cyan-800 hover:bg-cyan-200"}`}>
-                  📅 {t("weather.calendar")}
+                  Pobierz prognozę do kalendarza (.ics)
                 </button>
               </div>
             </div>

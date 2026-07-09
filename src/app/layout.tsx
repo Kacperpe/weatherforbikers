@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { LangProvider } from "@/contexts/lang-context";
+import { PwaRegister } from "@/components/pwa-register";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -38,6 +39,8 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#020617" />
         {/* Runs before React — applies dark class from localStorage to prevent FOUC */}
         <Script id="theme-init" strategy="beforeInteractive">{`
           try {
@@ -49,6 +52,7 @@ export default function RootLayout({
       </head>
       <body className="h-full overflow-hidden flex flex-col bg-white dark:bg-slate-950 transition-colors">
         <LangProvider>{children}</LangProvider>
+        <PwaRegister />
         <Analytics />
       </body>
     </html>
