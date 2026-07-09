@@ -95,7 +95,6 @@ export function PrivacyContent() {
         <div className="mt-8 space-y-8 text-sm leading-6 text-slate-700 dark:text-slate-300">
           <section>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{copy.admin}</h2>
-            <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">{copy.warning}</p>
             <p className="mt-2">{copy.adminText}</p>
           </section>
           <Section title={copy.data}>{copy.dataText}</Section>
