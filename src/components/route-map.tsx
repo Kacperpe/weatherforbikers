@@ -109,8 +109,10 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
   const poiLayerRef = useRef<LeafletType.LayerGroup | null>(null);
   const forecastLayerRef = useRef<LeafletType.LayerGroup | null>(null);
   const userMarkerRef = useRef<LeafletType.Marker | null>(null);
+  const previousLocationRef = useRef<LatLng | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(7);
+  const [followLocation, setFollowLocation] = useState(true);
 
   useEffect(() => {
     const L = leafletRef.current;
@@ -120,8 +122,13 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
     if (!currentLocation) {
       userMarkerRef.current?.remove();
       userMarkerRef.current = null;
+      previousLocationRef.current = null;
       return;
     }
+
+    const firstFix = previousLocationRef.current === null;
+    if (firstFix) setFollowLocation(true);
+    previousLocationRef.current = currentLocation;
 
     if (!userMarkerRef.current) {
       const icon = L.divIcon({
@@ -135,8 +142,8 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
       userMarkerRef.current.setLatLng(currentLocation);
     }
 
-    map.panTo(currentLocation, { animate: true, duration: 0.35 });
-  }, [currentLocation, mapReady]);
+    if (firstFix || followLocation) map.panTo(currentLocation, { animate: true, duration: 0.35 });
+  }, [currentLocation, followLocation, mapReady]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -155,6 +162,7 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
       forecastLayerRef.current = L.layerGroup(); // not added to map yet — zoom-gated
 
       map.on("zoomend", () => setZoomLevel(map.getZoom()));
+      map.on("dragstart", () => setFollowLocation(false));
 
       setMapReady(true);
     })();
@@ -434,5 +442,23 @@ export function RouteMap({ points, themeMode, weatherAlerts, pois, forecastRows,
     }
   }, [mapReady, zoomLevel]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {currentLocation && (
+        <button
+          type="button"
+          aria-label="Wycentruj mapę na mojej lokalizacji"
+          title="Wycentruj mapę na mojej lokalizacji"
+          onClick={() => {
+            setFollowLocation(true);
+            mapRef.current?.panTo(currentLocation, { animate: true, duration: 0.35 });
+          }}
+          className="absolute bottom-24 right-3 z-[1000] flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white text-xl text-cyan-600 shadow-lg hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-cyan-400 dark:hover:bg-slate-900"
+        >
+          ◎
+        </button>
+      )}
+    </div>
+  );
 }

@@ -137,7 +137,8 @@ export function RideMode({ segments, alerts, isDark, onLocationChange }: Props) 
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold">Tryb jazdy</p>
-            <p className="mt-0.5 text-xs opacity-60">GPS i ostrzeżenia pogodowe na trasie</p>
+          <p className="mt-0.5 text-xs opacity-60">GPS i ostrzeżenia pogodowe na trasie</p>
+          <p className="mt-2 max-w-[15rem] text-[11px] leading-4 opacity-50">Pozycja jest używana tylko podczas aktywnej jazdy i nie jest zapisywana na serwerze.</p>
           </div>
           <button type="button" onClick={() => void startRide()} className="rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400">
             Rozpocznij
