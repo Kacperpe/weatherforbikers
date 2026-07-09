@@ -17,6 +17,20 @@ import type { WeatherAlert, WeatherAlertKind } from "@/types/weather-alert";
 
 const DEMO_ROUTES: { label: string; file: string }[] = [];
 
+const PRIVACY_LABELS: Record<string, string> = {
+  pl: "Polityka prywatności",
+  en: "Privacy policy",
+  de: "Datenschutzerklärung",
+  fr: "Politique de confidentialité",
+  es: "Política de privacidad",
+  it: "Informativa sulla privacy",
+  cs: "Zásady ochrany osobních údajů",
+  nl: "Privacybeleid",
+  pt: "Política de privacidade",
+  sv: "Integritetspolicy",
+  ua: "Політика конфіденційності",
+};
+
 type ThemeMode = "dark" | "light";
 const FORECAST_WINDOW_MS = 16 * 24 * 60 * 60 * 1000;
 const FORECAST_BUFFER_MS = 60 * 60 * 1000;
@@ -957,7 +971,7 @@ export default function Home() {
                 {/* Footer */}
                 <div className={`pt-1 text-center text-[11px] ${isDark ? "text-slate-600" : "text-slate-400"}`}>
                   <Link href="/privacy" className={`mr-3 transition-colors hover:underline ${isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-600 hover:text-slate-900"}`}>
-                    Polityka prywatności
+                    {PRIVACY_LABELS[lang] ?? PRIVACY_LABELS.en}
                   </Link>
                   Made by{" "}
                   <a
